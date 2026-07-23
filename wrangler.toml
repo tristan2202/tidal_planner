@@ -1,0 +1,7 @@
+name = "tidal-planner"
+pages_build_output_dir = "."
+compatibility_date = "2026-07-23"
+
+[[r2_buckets]]
+binding = "TIDAL_DATA"
+bucket_name = "tidal-planner-data"
