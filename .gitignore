@@ -2,6 +2,9 @@
 __pycache__/
 *.pyc
 
+# wrangler's own local dev state/cache (created by `wrangler pages dev`).
+.wrangler/
+
 # Dev-only scratch screenshots and extraction logs -- not app source,
 # regenerable/reproducible, not meant to be part of the deployed site.
 screenshot_*.png
