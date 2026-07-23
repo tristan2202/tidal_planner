@@ -291,6 +291,22 @@
     background: #16324a; color: #cfd8dc; font-size: 11px;
     display: flex; align-items: center; justify-content: center; text-align: center;
   }
+  /* Depth-chart color legend (2026-07-25, user: "the depth map seems to
+     display all depth below LAT in one color -- any way to differentiate
+     even better?") -- floats below the top bar (same body-level-absolute
+     convention as #depth-probe-tooltip), shown only while "Depth chart" is
+     checked. Built from DEPTH_COLOR_STOPS itself (see diagDepthRGB()), not
+     a separate hardcoded description, so it can never drift out of sync
+     with the actual fill colors. */
+  #diag-depth-legend {
+    position: absolute; top: 36px; right: 10px; z-index: 1000; display: none;
+    flex-direction: column; gap: 3px; width: 190px;
+    background: rgba(255,255,255,.94); border: 1px solid #ccc; border-radius: 4px;
+    padding: 5px 8px; font-size: 10px; color: #333; box-shadow: 0 1px 4px rgba(0,0,0,.3);
+  }
+  #diag-depth-legend.show { display: flex; }
+  #diag-depth-legend-bar { height: 10px; border-radius: 2px; }
+  #diag-depth-legend-labels { display: flex; justify-content: space-between; }
   #depth-probe-tooltip {
     position: absolute; display: none; pointer-events: none; z-index: 900;
     background: rgba(0,0,0,.82); color: #fff; padding: 3px 7px; border-radius: 4px;
@@ -336,6 +352,7 @@
   <label class="hint" style="display:flex;align-items:center;gap:4px;cursor:pointer" title="Simplified DEPARE (fast load, ~85% fewer vertices) is the default for both the safety-check query and the Depth chart overlay -- query results and rendering are both verified to match the native data closely (see Claude.md). Check this to load the real, full-detail charted DEPARE boundaries instead, at the cost of a much larger download.">
     <input type="checkbox" id="diag-depare-highdetail"> High-detail DEPARE (native)</label>
 </div>
+<div id="diag-depth-legend"></div>
 <div id="map"></div>
 <div id="time-box">
   <div id="time-box-header">
@@ -1052,14 +1069,66 @@
     _drawDiagCurrentForGrid(grid, 'NL', bin, frac, STEP);
     _drawDiagCurrentForGrid(gridDe, 'DE', bin, frac, STEP);
   }
+  // Depth color ramp (2026-07-25, user: "the depth map seems to display all
+  // depth below LAT in one color -- any way to differentiate even better?
+  // It would help to identify routes between areas that fall dry at ebb
+  // tide and which have a bit of water left"). The old scheme was a flat
+  // brown for every depthM<=0 plus one flat pink band for 0-2m -- exactly
+  // the range where "dries completely" vs "a bit of water left at low
+  // water" actually matters for a wantij crossing, shown with zero
+  // resolution. Replaced with a continuous, piecewise-linear-interpolated
+  // ramp (not discrete bands) with most of its stops packed into -2..+2m --
+  // a red-orange-yellow "hazard" gradient right around chart datum,
+  // transitioning into the old blue scale once depth stops being safety-
+  // critical. DEPTH_COLOR_STOPS also drives the on-map legend (see
+  // updateDiagDepthLegend()) so the two can never drift apart.
+  var DEPTH_COLOR_STOPS = [
+    [-2.0, [92, 51, 23]],    // well above datum -- effectively permanent land
+    [-0.5, [156, 109, 63]],  // marginal high ground, still normally dry
+    [0.0, [202, 0, 32]],     // AT chart datum -- the driest a "wet" cell gets
+    [0.3, [244, 109, 67]],
+    [0.6, [253, 174, 97]],
+    [1.0, [254, 224, 139]],
+    [1.5, [217, 239, 139]],
+    [2.0, [145, 191, 219]],
+    [5.0, [69, 117, 180]],
+    [10.0, [33, 79, 129]],
+    [20.0, [8, 48, 107]]
+  ];
   function diagDepthRGB(depthM) {
     if (depthM === null || isNaN(depthM)) return null;
-    if (depthM <= 0) return [139, 107, 61];
-    if (depthM < 2) return [253, 224, 221];
-    if (depthM < 5) return [198, 219, 239];
-    if (depthM < 10) return [107, 174, 214];
-    if (depthM < 20) return [33, 113, 181];
-    return [8, 48, 107];
+    var stops = DEPTH_COLOR_STOPS;
+    if (depthM <= stops[0][0]) return stops[0][1];
+    for (var i = 1; i < stops.length; i++) {
+      if (depthM <= stops[i][0]) {
+        var lo = stops[i - 1], hi = stops[i];
+        var t = (depthM - lo[0]) / (hi[0] - lo[0]);
+        return [
+          Math.round(lo[1][0] + t * (hi[1][0] - lo[1][0])),
+          Math.round(lo[1][1] + t * (hi[1][1] - lo[1][1])),
+          Math.round(lo[1][2] + t * (hi[1][2] - lo[1][2]))
+        ];
+      }
+    }
+    return stops[stops.length - 1][1];
+  }
+  // Legend, built directly from DEPTH_COLOR_STOPS (see redrawDiagDepth()
+  // for where this is called) -- a smooth CSS gradient using the same stop
+  // positions the interpolation above uses, so the displayed bar is an
+  // exact picture of the real fill colors, not a hand-drawn approximation.
+  function updateDiagDepthLegend() {
+    var wrap = document.getElementById('diag-depth-legend');
+    var on = document.getElementById('diag-depth').checked;
+    wrap.classList.toggle('show', on);
+    if (!on) return;
+    var n = DEPTH_COLOR_STOPS.length;
+    var gradParts = DEPTH_COLOR_STOPS.map(function (s, i) {
+      var rgb = s[1];
+      return 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ') ' + (i / (n - 1) * 100) + '%';
+    });
+    wrap.innerHTML =
+      '<div id="diag-depth-legend-bar" style="background:linear-gradient(to right,' + gradParts.join(',') + ')"></div>' +
+      '<div id="diag-depth-legend-labels"><span>dry</span><span>0</span><span>0.6</span><span>1.5</span><span>5</span><span>20m+</span></div>';
   }
   // Depth chart overlay -- the one real depth diagnostic kept after the
   // 2026-07-21 UI cleanup (user request: "only have the checkbox to show
@@ -1235,6 +1304,7 @@
     return { fill: true, fillColor: diagDepthColor(properties.depth_lat), fillOpacity: 1.0, stroke: false };
   }
   function redrawDiagDepth() {
+    updateDiagDepthLegend();
     if (diagDepthVectorLayer) { map.removeLayer(diagDepthVectorLayer); diagDepthVectorLayer = null; }
     if (diagDepthVectorLayerDe) { map.removeLayer(diagDepthVectorLayerDe); diagDepthVectorLayerDe = null; }
     if (diagDepthOverlayDe) { map.removeLayer(diagDepthOverlayDe); diagDepthOverlayDe = null; }
