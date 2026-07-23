@@ -37,6 +37,12 @@
     box-sizing: border-box; padding: 2px 4px; font-size: 12px;
     border: 1px solid #3a6f96; border-radius: 3px; background: #fff;
   }
+  /* dd.mm.yyyy readout (2026-07-25) -- the native datetime-local picker's
+     OWN displayed format is set by the browser/OS locale (seen as
+     DD/MM/YYYY) and can't be reliably restyled cross-browser without a
+     fragile transparent-text-plus-overlay hack; this plain adjacent label
+     gives an unambiguous reading instead, always in the same format. */
+  #plan-date-fmt { font-size: 11px; color: #9fb8cc; font-variant-numeric: tabular-nums; }
   /* Draggable time-control widget (2026-07-21, Windy.com-inspired, user
      request) -- lets the user step the "displayed time" forward/backward
      and see the boat's position along the route at that instant. Starts
@@ -67,27 +73,22 @@
   #time-box-controls #time-goto-now { flex: 1.3; font-size: 12px; }
   .boat-icon { text-align: center; }
 
-  /* Tidal-curve hover window (2026-07-22, user request) -- "we now know
-     which reference point is closest [to the hovered map point] ... create
-     another hovering and moveable window that shows the tidal curve of the
-     closest reference point, highlighting the actual map time." Same
-     draggable/floating pattern as #time-box (plain left/top, not the
-     viewport-relative right/bottom convention), separate from the
-     mouse-following #depth-probe-tooltip -- this one stays put once
-     dragged and updates its content on hover instead of following the
-     cursor around. */
-  #tide-curve-box {
-    position: absolute; top: 165px; left: 54px; width: 250px;
-    background: rgba(255,255,255,.95); border: 1px solid #ccc; border-radius: 6px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.35); font-size: 12px; z-index: 600;
-    padding: 6px 10px 8px; display: none;
-  }
-  #tide-curve-box-header { display: flex; align-items: center; gap: 6px; cursor: move; user-select: none; }
-  #tide-curve-box-label {
-    font-size: 12px; font-weight: 700; color: #16324a; white-space: nowrap;
-    overflow: hidden; text-overflow: ellipsis;
-  }
-  #tide-curve-canvas { display: block; margin-top: 4px; width: 100%; }
+  /* Tidal-curve panel, 2026-07-25 (user: "This should be a separate
+     checkbox ('Tidal Curves') ... needs a dropdown with all available
+     stations ... should be part of the map time window, so that users can
+     scrub through the tidal curves") -- replaces BOTH the old hover-
+     triggered floating tide-curve-box (auto-detected nearest station to
+     the cursor) and the route-box's own auto-detected-nearest-to-
+     departure-point curve with ONE manually-selected, checkbox-toggled
+     panel, folded directly into #time-box (not a separate floating box)
+     so scrubbing the Map Time widget moves through it directly. Hidden by
+     default; #time-box's own width already fits it. */
+  #tidal-curve-panel { margin-top: 8px; padding-top: 8px; border-top: 1px solid #e3e3e3; }
+  #tidal-curve-station { width: 100%; box-sizing: border-box; font-size: 12px; padding: 2px 4px; }
+  #tidal-curve-canvas { display: block; margin-top: 6px; width: 100%; }
+  #tidal-curve-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; font-size: 10px; color: #444; }
+  #tidal-curve-legend span { display: flex; align-items: center; gap: 3px; }
+  #tidal-curve-legend i { width: 10px; height: 10px; display: inline-block; }
 
   /* Floating "hover box" over the map (2026-07-20) -- route info used to
      live at the bottom of #panel, below Boat&safety/Auto-route/Departure
@@ -126,34 +127,25 @@
      "Live" freezes every route sample to the Map Time widget's single
      instant (drawRouteSnapshot); "Optimizer" runs the ±window departure
      search and labels each waypoint with its own safe time window (unchanged
-     transit-propagated drawRouteForDeparture path). Same .colormode-btn look
-     as the existing Safety/Depth row for visual consistency. */
+     transit-propagated drawRouteForDeparture path). Collapsed to a SINGLE
+     toggle button 2026-07-25 (user: "the button size changes when switching
+     ... simplify this into one toggle button" -- two side-by-side buttons
+     of very different label lengths made the row's wrapped height jump
+     between modes; one button showing the CURRENT mode, toggling on click,
+     has nothing to visually jump). */
   #mode-row { display: flex; gap: 4px; margin-top: 8px; flex: none; }
-  #color-mode-row { display: flex; gap: 4px; margin-top: 8px; flex: none; }
-  /* .mode-btn (the Live/Optimizer toggle) shares this look but is a
-     DELIBERATELY separate class, not just a second selector on the same
-     name -- .colormode-btn is also targeted by a `querySelectorAll` that
-     wires Safety/Depth's click behavior (colorMode = btn.dataset.mode)
-     onto every matching element; reusing that class for the mode buttons
-     would have silently roped them into that handler too (no
-     `data-mode` on them, so `colorMode` would get set to `undefined` on
-     every mode switch) -- caught before it shipped, not after. */
-  .colormode-btn, .mode-btn {
+  .mode-btn {
     flex: 1; padding: 4px 4px; font-size: 11px; border: 1px solid #16324a;
     background: #fff; color: #16324a; border-radius: 4px; cursor: pointer;
   }
-  .colormode-btn:hover, .mode-btn:hover { background: #e8edf1; }
-  .colormode-btn.active, .mode-btn.active { background: #16324a; color: #fff; }
-  .colormode-btn.active:hover, .mode-btn.active:hover { background: #204a70; }
+  .mode-btn:hover { background: #e8edf1; }
+  .mode-btn.active { background: #16324a; color: #fff; }
+  .mode-btn.active:hover { background: #204a70; }
+  /* Depth color-mode toggle (Safety/Depth) REMOVED 2026-07-25 -- user's own
+     call, "only use the safety mode" -- #color-mode-legend now just shows
+     the Safety mode's fixed legend text as a static label, not a
+     mode-dependent one. */
   #color-mode-legend { font-size: 10px; color: #444; margin-top: 4px; flex: none; }
-  /* Tidal-curve chart embedded in the route box itself (2026-07-22, user:
-     "and by the way the same for the route window") -- same curve/now-
-     marker rendering as #tide-curve-box above, but for the station nearest
-     the route's own departure point, always visible alongside the route
-     rather than only while hovering. */
-  #route-tide-curve { margin-top: 8px; padding-top: 8px; border-top: 1px solid #e3e3e3; flex: none; }
-  #route-tide-curve-label { font-size: 11px; font-weight: 700; color: #16324a; }
-  #route-tide-curve-canvas { display: block; margin-top: 4px; width: 100%; }
   /* Compact icon-tile stats (2026-07-21) -- replaces four full sentences
      with a 2x2 glyph+number grid for an at-a-glance read, per user
      request ("more with icons, not too much narrative"). */
@@ -197,27 +189,39 @@
      to the next feasible one, without having to manually retype the
      plan-date picker. Disabled whenever there's no current pick to step
      past (no route, or nothing feasible in the search window). */
-  #next-departure-btn {
-    display: block; width: 100%; margin-top: 6px; padding: 5px 8px; font-size: 12px;
+  #dep-step-row { display: flex; gap: 6px; margin-top: 6px; }
+  #dep-step-row button {
+    flex: 1; padding: 5px 6px; font-size: 12px;
     border: 1px solid #16324a; background: #fff; color: #16324a; border-radius: 4px; cursor: pointer;
   }
-  #next-departure-btn:hover:not(:disabled) { background: #e8edf1; }
-  #next-departure-btn:disabled { color: #aaa; border-color: #ccc; cursor: default; }
+  #dep-step-row button:hover:not(:disabled) { background: #e8edf1; }
+  #dep-step-row button:disabled { color: #aaa; border-color: #ccc; cursor: default; }
   .row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
   .row label { flex: 1; font-size: 12px; color: #444; }
   .row input[type=number] { width: 70px; box-sizing: border-box; padding: 3px 5px; font-size: 13px; }
   .row input[type=text] { width: 100%; box-sizing: border-box; padding: 3px 5px; font-size: 12px; }
-  /* Departure-search readouts, simplified 2026-07-23 (was a 2-row table,
-     user: "the window shows a lot of redundant information and bad
-     formatting") -- a single compact line, since HW time + tidal range
-     are reference numbers, not the primary decision output (the callout
-     below is). Hidden by default -- Mode 1 (Live) doesn't run the
-     departure search at all, so this whole block is only shown in Mode 2.
+  /* Departure-search panel, Mode 2 (Optimizer) only -- hidden by default,
      Toggled by setAppMode() via .style.display, not a class, so this
-     default is only the pre-JS/no-JS fallback. */
+     default is only the pre-JS/no-JS fallback. The old HW/tidal-range
+     readout line was removed 2026-07-25 (user: "seems to refer to
+     Harlingen still, remove it") -- it was a reference number, not the
+     primary decision output (the depth LED + callout below are). */
   #dep-search { display: none; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e3e3e3; flex: none; }
-  #dep-readout { font-size: 11px; color: #444; }
-  #dep-readout span { font-weight: 600; color: #16324a; font-variant-numeric: tabular-nums; }
+  /* Depth-constraint LED (2026-07-25, replaces the old "Depth-constrained"/
+     "Shallow, but doesn't dry" text banner + separate constraint-badge
+     wording with one compact traffic-light: green = every departure in the
+     search window clears comfortably (>=0.5 m margin); amber = a safe
+     departure exists but margin is tight (<0.5 m) somewhere, or the route
+     is only SOMETIMES feasible in this search range; red = no departure in
+     this window clears the whole route at all. */
+  #depth-led { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; margin-top: 4px; }
+  #depth-led .led-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+  /* Shallowest/deepest infobox (2026-07-25, replaces the removed Depth
+     color-mode toggle -- same lastMinDepth/lastMaxDepth numbers that mode's
+     legend already computed, now shown plainly instead of behind a mode
+     switch nobody needs any more). */
+  #depth-range-info { font-size: 11px; color: #444; margin-top: 4px; }
+  #depth-range-info span { font-weight: 600; color: #16324a; }
   /* Departure-time callout (2026-07-23, user: "the most relevant information
      is the departure time (window) - highlight better") -- pulled out of the
      result table into its own high-contrast block so it reads at a glance
@@ -257,17 +261,6 @@
   #wplist li button { border: none; background: none; color: #b33; cursor: pointer; font-size: 15px; }
   #empty-hint { margin-top: 8px; color: #888; font-size: 12px; flex: none; }
   #result { margin-top: 10px; font-size: 12px; color: #222; white-space: pre-line; }
-  #result .best { color: #1a7a1a; font-weight: bold; }
-  #result .worst { color: #a11; font-weight: bold; }
-  .best { color: #1a7a1a; font-weight: bold; }
-  .worst { color: #a11; font-weight: bold; }
-  /* Feasibility legend for the route's own tidal-curve widget (2026-07-23,
-     replaces the old separate SVG bar chart -- see _fillFeasibilityArea's
-     own comment). Only populated (via JS) in Optimizer mode, where the
-     curve's own area shading actually means something. */
-  #route-tide-curve-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; font-size: 10px; color: #444; }
-  #route-tide-curve-legend span { display: flex; align-items: center; gap: 3px; }
-  #route-tide-curve-legend i { width: 10px; height: 10px; display: inline-block; }
   #grid-status { padding: 2px 0; font-size: 11px; color: #666; flex: none; }
   #grid-status.ok { color: #1a7a1a; }
   #grid-status.err { color: #a11; }
@@ -329,14 +322,17 @@
   </div>
   <div id="bar-date">
     <label>Plan around<input type="datetime-local" id="plan-date" title="Departure search plans around this date/time"></label>
+    <span id="plan-date-fmt" title="Same date/time as the picker, shown as dd.mm.yyyy (the native picker's own display format is set by your browser/OS locale and can't be overridden)"></span>
   </div>
   <span style="flex:1"></span>
   <label class="hint" style="display:flex;align-items:center;gap:4px;cursor:pointer">
-    <input type="checkbox" id="diag-current"> Current grid (raw, HW)</label>
+    <input type="checkbox" id="diag-current"> Current Overlay</label>
   <label class="hint" style="display:flex;align-items:center;gap:4px;cursor:pointer">
     <input type="checkbox" id="diag-depth"> Depth chart</label>
   <label class="hint" style="display:flex;align-items:center;gap:4px;cursor:pointer">
     <input type="checkbox" id="depth-probe"> Depth probe (hover)</label>
+  <label class="hint" style="display:flex;align-items:center;gap:4px;cursor:pointer" title="Shows a tidal curve for a station you pick from a dropdown, in the Map Time widget -- scrub the map time to move through it.">
+    <input type="checkbox" id="tidal-curves-toggle"> Tidal Curves</label>
   <label class="hint" style="display:flex;align-items:center;gap:4px;cursor:pointer" title="Simplified DEPARE (fast load, ~85% fewer vertices) is the default for both the safety-check query and the Depth chart overlay -- query results and rendering are both verified to match the native data closely (see Claude.md). Check this to load the real, full-detail charted DEPARE boundaries instead, at the cost of a much larger download.">
     <input type="checkbox" id="diag-depare-highdetail"> High-detail DEPARE (native)</label>
 </div>
@@ -346,21 +342,21 @@
     <span id="time-box-drag-handle" title="Drag to move">⠿</span>
     <span id="time-box-label">Map time</span>
   </div>
-  <div id="time-box-display"></div>
-  <div id="time-box-controls">
-    <button id="time-back-1h" title="Back 1 hour">«</button>
-    <button id="time-back-15m" title="Back 15 min">‹</button>
-    <button id="time-goto-now" title="Jump to the actual current time">Now</button>
-    <button id="time-fwd-15m" title="Forward 15 min">›</button>
-    <button id="time-fwd-1h" title="Forward 1 hour">»</button>
+  <div id="time-box-step-section">
+    <div id="time-box-display"></div>
+    <div id="time-box-controls">
+      <button id="time-back-1h" title="Back 1 hour">«</button>
+      <button id="time-back-15m" title="Back 15 min">‹</button>
+      <button id="time-goto-now" title="Jump to the actual current time">Now</button>
+      <button id="time-fwd-15m" title="Forward 15 min">›</button>
+      <button id="time-fwd-1h" title="Forward 1 hour">»</button>
+    </div>
   </div>
-</div>
-<div id="tide-curve-box">
-  <div id="tide-curve-box-header">
-    <span id="tide-curve-box-drag-handle" title="Drag to move">⠿</span>
-    <span id="tide-curve-box-label">—</span>
+  <div id="tidal-curve-panel" style="display:none">
+    <select id="tidal-curve-station"></select>
+    <canvas id="tidal-curve-canvas" width="230" height="110"></canvas>
+    <div id="tidal-curve-legend"></div>
   </div>
-  <canvas id="tide-curve-canvas" width="230" height="110"></canvas>
 </div>
 <div id="route-box">
   <div id="route-box-header">
@@ -374,27 +370,21 @@
     </div>
   </div>
   <div id="grid-status">Loading grids (NL + Germany, ~450 MB, first load takes ~20-30s)…</div>
-  <div class="row"><label>Add waypoint</label><select id="harbour-add" style="flex:1"></select></div>
+  <div class="row"><label>Start from</label><select id="harbour-add" style="flex:1"></select></div>
   <div id="mode-row">
-    <button id="mode-live-btn" class="mode-btn active" title="Route reflects conditions at the Map Time widget's instant">🕐 Live (map time)</button>
-    <button id="mode-calc-btn" class="mode-btn" title="Search departure times, label each waypoint with its safe window">▶ Calculate safe/fast route time</button>
+    <button id="mode-toggle-btn" class="mode-btn active">🕐 Live (map time)</button>
   </div>
-  <div id="color-mode-row">
-    <button class="colormode-btn active" data-mode="safety" title="Green/orange/red vs. required depth">Safety</button>
-    <button class="colormode-btn" data-mode="depth" title="Gradient by actual depth at transit time">Depth</button>
-  </div>
-  <div id="color-mode-legend"></div>
+  <div id="color-mode-legend">Green = clears required depth, orange = within 0.3 m, red = short.</div>
+  <div id="depth-range-info"></div>
   <div id="stats"></div>
   <div id="coverage-warning"></div>
   <div id="dep-search">
-    <div id="dep-readout">HW <span id="ref-hw">—</span> &middot; Range <span id="range-readout-field">—</span></div>
+    <div id="depth-led"></div>
     <div id="result"></div>
-    <button id="next-departure-btn" disabled>⏭ Next possible departure</button>
-  </div>
-  <div id="route-tide-curve">
-    <div id="route-tide-curve-label">—</div>
-    <canvas id="route-tide-curve-canvas" width="250" height="100"></canvas>
-    <div id="route-tide-curve-legend"></div>
+    <div id="dep-step-row">
+      <button id="prev-departure-btn" disabled>⏮ Previous cycle</button>
+      <button id="next-departure-btn" disabled>Next cycle ⏭</button>
+    </div>
   </div>
   <div id="constraint-badge"></div>
   <div id="route-hint">
@@ -894,23 +884,16 @@
   var plannedDepartureMs = Date.now();
   var displayedMs = plannedDepartureMs;
   refreshRefHw();
-  // "Step to next possible departure" state (2026-07-23) -- see
-  // runOptimizer()'s own comment for how excludeDeparturesBeforeMs is
-  // used. lastPickDepartureMs is the actual departure instant runOptimizer()
-  // last recommended (set in every branch that finds a pick), so the
-  // "Next departure" button knows what to step past.
-  var excludeDeparturesBeforeMs = null;
+  // lastPickDepartureMs is the actual departure instant runOptimizer() last
+  // recommended (set in every branch that finds a pick) -- used to center
+  // the tidal-curve widget on the real recommended departure in Optimizer
+  // mode (see its own code). The old excludeDeparturesBeforeMs/
+  // lastPickWindowEndMs "step to next FEASIBLE departure" machinery was
+  // removed 2026-07-25 in favor of simple unconditional cycle-stepping
+  // (see stepPlanCycle()) -- see Claude.md for why.
   var lastPickDepartureMs = null;
-  // lastPickWindowEndMs (2026-07-23, user report: for a depth-constrained
-  // route, "next possible departure" only stepped forward 10 minutes at a
-  // time instead of jumping to the next feasible window/tidal cycle) -- the
-  // departure instant of the LAST candidate in the currently-recommended
-  // feasible window (windows.length branch only; null otherwise). See the
-  // next-departure-btn click handler for why this is what actually needs
-  // to be skipped past, not just the single picked instant.
-  var lastPickWindowEndMs = null;
   // Last runOptimizer() candidate sweep (2026-07-23) -- shared with
-  // updateRouteTideCurve() so its feasibility color band can reuse the
+  // updateTidalCurveWidget() so its feasibility color band can reuse the
   // exact same per-departure feasible/infeasible data the result panel
   // itself is based on, rather than a second computation. null in Live
   // mode (no sweep runs there) and whenever there's no route.
@@ -1874,14 +1857,14 @@
     return null;
   }
 
-  // Tidal-curve rendering (2026-07-22, user request) -- shared by the
-  // hover window (#tide-curve-box) and the route box's own embedded curve
-  // below. Draws water level vs. time for one station's own grid cell over
-  // a window centered on `centerMs` spanning one full M2 cycle either side
-  // (so a high and low are both visible), with a vertical marker + dot at
-  // the center (i.e. the currently displayed map time) -- the actual
-  // curve shape shifts as centerMs (the time-control widget) moves, same
-  // idea as scrubbing a tide-table graph.
+  // Tidal-curve rendering (2026-07-22, user request; folded into the
+  // #tidal-curve-panel inside #time-box 2026-07-25, see setAppMode()'s own
+  // comment for why). Draws water level vs. time for one station's own
+  // grid cell over a window centered on `centerMs` spanning one full M2
+  // cycle either side (so a high and low are both visible), with a
+  // vertical marker + dot at the center (i.e. the currently displayed map
+  // time) -- the actual curve shape shifts as centerMs (the time-control
+  // widget) moves, same idea as scrubbing a tide-table graph.
   var TIDE_CURVE_SAMPLES = 61;
   // Takes the HARBOURS entry itself (not just its grid idx), 2026-07-22 --
   // needed so the curve can apply that station's own NAP-to-LAT offset
@@ -1889,19 +1872,19 @@
   // waterLevelAt() value, which is what the "plus and minus... should be
   // about 2m extra water at high tide" user report was pointing at.
   // Real bug, user-reported 2026-07-23 ("the numbers in the tidal height
-  // widget seem to render poorly"): #route-tide-curve-canvas's intrinsic
-  // backing store (the HTML width/height attributes, 250x100) was smaller
-  // than its actual CSS-rendered size (`width:100%` of #route-box, ~340px
-  // wide) -- the browser scales the bitmap up to fill that space, which
-  // blurs everything drawn on it, worst for small text like the min/max
-  // labels (confirmed directly: measured a 1.36x stretch in both axes).
+  // widget seem to render poorly"): the canvas's intrinsic backing store
+  // (the HTML width/height attributes, 250x100) was smaller than its
+  // actual CSS-rendered size (`width:100%` of its container) -- the
+  // browser scales the bitmap up to fill that space, which blurs
+  // everything drawn on it, worst for small text like the min/max labels
+  // (confirmed directly: measured a 1.36x stretch in both axes).
   // Fixed by resizing the backing store to match the canvas's own actual
   // CSS pixel size (times devicePixelRatio, for retina crispness too)
   // right before drawing, then scaling the context so the rest of this
   // function's drawing math -- already expressed in terms of `w`/`hgt` --
   // needs no other change. Skipped when the canvas isn't laid out yet
-  // (clientWidth/Height 0, e.g. the hover tide-curve-box before "Depth
-  // probe" is first checked) since resizing to 0 would just blank it.
+  // (clientWidth/Height 0, e.g. before the "Tidal Curves" checkbox is
+  // first checked) since resizing to 0 would just blank it.
   function resizeCanvasForCrispDrawing(canvas) {
     var cssW = canvas.clientWidth, cssH = canvas.clientHeight;
     if (!cssW || !cssH) return { w: canvas.width, hgt: canvas.height };
@@ -2291,16 +2274,6 @@
     ctx.fillText(minV.toFixed(2) + ' m', 6, hgt - 4);
   }
 
-  // Cached so the curve can be re-drawn (e.g. when the time-control widget
-  // steps) without needing a fresh mousemove event.
-  var lastHoverStation = null;
-  function redrawHoverTideCurve() {
-    if (!document.getElementById('depth-probe').checked || !lastHoverStation) return;
-    document.getElementById('tide-curve-box-label').textContent =
-      lastHoverStation.h.name + ' (' + lastHoverStation.distNm.toFixed(1) + ' nm)';
-    drawTideCurve(document.getElementById('tide-curve-canvas'), lastHoverStation.h, displayedMs);
-  }
-
   // Pixel-distance nearest sample on the currently-drawn route (2026-07-22)
   // -- fixes a real reported inconsistency: the route's own color/depth
   // (drawRouteForDeparture) always evaluates each point at ITS OWN transit
@@ -2326,38 +2299,31 @@
     }
     return bestDist <= ROUTE_HOVER_PX ? best : null;
   }
+  // Simplified 2026-07-25 (user: "the TriLaWatt model is good enough" --
+  // drop the nearest/2nd-nearest named-station WL comparison lines, show
+  // just this exact point's own LAT depth and model-derived actual depth).
   function updateDepthProbe(e) {
     var lat = e.latlng.lat, lon = e.latlng.lng;
     var onRoute = nearestRoutePoint(e.latlng);
     var evalMs = onRoute ? onRoute.ms : displayedMs;
     var evalRefHwMs = onRoute ? lastRefHwMs : refHwMs;
     var frac = onRoute ? lastDrawFrac : realFracAt(displayedMs);
-    var idx = depthGridIdx(lat, lon);
     var charted = chartedDepthAt(lat, lon);
-    var fmtWl = function (d) { return d === null ? '—' : (d >= 0 ? '+' : '') + d.toFixed(2) + ' m'; };
     var phaseHere = phaseHoursAt(evalMs, evalRefHwMs, grid.m2Hours);
+    // actualDepthAt() = chartedDepthAt() + the NAP-to-LAT-corrected model
+    // water level at this point/instant (see its own comment) -- "LAT plus
+    // model depth," the exact number the safety check itself reads.
+    var modelDepth = actualDepthAt(lat, lon, phaseHere, frac);
     // In Mode 1 (Live) every route sample IS the map time already (see
     // drawRouteCore's snapshot branch) -- label it "map time" even when
     // hovering the route itself, rather than the Mode-2-flavored "route
     // transit," which would otherwise read as a second, different clock
     // when it's actually the exact same instant (2026-07-23).
     var timeLabel = (onRoute && appMode !== 'live') ? ('route transit, ' + fmtTime(evalMs)) : ('map time, ' + fmtTime(evalMs));
-    var lines = ['LAT depth: ' + (charted === null ? 'no data' : charted.toFixed(2) + ' m')];
-    // NAP-to-LAT corrected (heightAboveLatAt, 2026-07-22), not the raw
-    // waterLevelAt() -- see its own comment for why this matters (the
-    // "plus and minus... should be about 2m extra water" report).
-    lines.push('Water level (' + timeLabel + '): ' + fmtWl(idx ? heightAboveLatAt(lat, lon, idx, phaseHere, frac) : null));
-    if (idx) {
-      var ordinal = ['nearest', '2nd nearest'];
-      var nearest = nearestStations(lat, lon, 2);
-      nearest.forEach(function (ns, i) {
-        var sIdx = stationIdx(ns.h);
-        var wl = sIdx ? heightAboveLatAt(ns.h.lat, ns.h.lon, sIdx, phaseHere, frac) : null;
-        lines.push('WL (' + ordinal[i] + ': ' + ns.h.name + ', ' + ns.distNm.toFixed(1) + ' nm): ' + fmtWl(wl));
-      });
-      lastHoverStation = nearest[0];
-      redrawHoverTideCurve();
-    }
+    var lines = [
+      'LAT depth: ' + (charted === null ? 'no data' : charted.toFixed(2) + ' m'),
+      'Model depth (' + timeLabel + '): ' + (modelDepth === null ? '—' : modelDepth.toFixed(2) + ' m')
+    ];
     depthProbeEl.innerHTML = lines.join('<br>');
     depthProbeEl.style.left = (e.originalEvent.pageX + 12) + 'px';
     depthProbeEl.style.top = (e.originalEvent.pageY - 28) + 'px';
@@ -2367,14 +2333,22 @@
     if (this.checked) {
       map.on('mousemove', updateDepthProbe);
       map.getContainer().style.cursor = 'crosshair';
-      document.getElementById('tide-curve-box').style.display = 'block';
     } else {
       map.off('mousemove', updateDepthProbe);
       map.getContainer().style.cursor = '';
       depthProbeEl.style.display = 'none';
-      document.getElementById('tide-curve-box').style.display = 'none';
-      lastHoverStation = null;
     }
+  });
+  // Hide the probe tooltip whenever the mouse moves over the top bar
+  // (2026-07-25, user report: "the probe hover text should disappear once
+  // the probe is moved over the upper bar so that we can switch it off
+  // properly - now it sometimes overlaps the checkbox") -- the tooltip
+  // otherwise stays wherever the mouse last was over the MAP, which can
+  // sit right on top of the checkbox the user is trying to click to turn
+  // it off. The normal map mousemove handler re-shows it as soon as the
+  // mouse re-enters the map, so this is a one-way "get out of the way."
+  document.getElementById('bar').addEventListener('mouseenter', function () {
+    depthProbeEl.style.display = 'none';
   });
 
   // === time-control widget (2026-07-21, Windy.com-inspired) =============
@@ -2409,8 +2383,7 @@
     // harmless no-op there; in Mode 2 it keeps working exactly as before.
     if (appMode === 'live') drawRouteSnapshot(displayedMs);
     updateBoatMarker();
-    redrawHoverTideCurve();
-    updateRouteTideCurve();
+    updateTidalCurveWidget();
     // Real bug fix (2026-07-23, user report): the icon-tile stats
     // (computeQuickStats(), anchored to displayedMs in Live mode) never
     // refreshed on a time-control step -- only drawRouteSnapshot() was
@@ -2443,19 +2416,19 @@
 
   // Drag-to-move, plain left/top (px) rather than the app's usual
   // viewport-relative right/bottom convention -- see the CSS comment.
-  // Factored into a plain (non-IIFE) function 2026-07-22 so the new
-  // #tide-curve-box can reuse it too, not just #time-box.
+  // Factored into a plain (non-IIFE) function 2026-07-22 so more than one
+  // box can reuse it.
   function makeDraggable(box, handle) {
     var dragging = false, startX, startY, startLeft, startTop;
     handle.addEventListener('pointerdown', function (e) {
       // Real bug, user-reported 2026-07-23: #route-box-header contains the
-      // Clear/Export/Import buttons (unlike #time-box/#tide-curve-box's
-      // plain-text headers), and this handler used to start a drag (incl.
-      // setPointerCapture, which redirects the matching pointerup -- and
-      // therefore the click it would otherwise synthesize -- to the handle)
-      // on ANY pointerdown inside the header, swallowing clicks on those
-      // buttons before they ever reached them. Skip starting a drag when the
-      // press originates on an interactive control inside the handle.
+      // Clear/Export/Import buttons (unlike #time-box's plain-text header),
+      // and this handler used to start a drag (incl. setPointerCapture,
+      // which redirects the matching pointerup -- and therefore the click
+      // it would otherwise synthesize -- to the handle) on ANY pointerdown
+      // inside the header, swallowing clicks on those buttons before they
+      // ever reached them. Skip starting a drag when the press originates
+      // on an interactive control inside the handle.
       if (e.target.closest('button, select, input, a')) return;
       dragging = true;
       startX = e.clientX; startY = e.clientY;
@@ -2471,7 +2444,6 @@
     handle.addEventListener('pointerup', function () { dragging = false; });
   }
   makeDraggable(document.getElementById('time-box'), document.getElementById('time-box-header'));
-  makeDraggable(document.getElementById('tide-curve-box'), document.getElementById('tide-curve-box-header'));
   makeDraggable(document.getElementById('route-box'), document.getElementById('route-box-header'));
 
   // === route state ======================================================
@@ -2841,44 +2813,75 @@
     document.getElementById('wplist-arrow').classList.toggle('open', wplistOpen);
   });
 
-  // Route's own tidal-curve chart (2026-07-22, user: "and by the way the
-  // same for the route window") -- station nearest the route's departure
-  // point (first waypoint), always visible alongside the route rather than
-  // only while hovering. Reuses drawTideCurve() from the hover feature
-  // above, just a different (persistent, not hover-only) station source.
-  //
-  // Repurposed 2026-07-23 (user: "the departure feasibility chart is not
-  // very instructive - let's repurpose the tidal display for the departure
-  // location and do a color-coding ... which already has the HW time") --
-  // this widget now ALSO shows in Optimizer mode (previously Live-mode-
-  // only), centered on the actual recommended departure instead of the Map
-  // Time widget (which is hidden in that mode), with the area under the
-  // curve shaded by feasibility (see _fillFeasibilityArea) instead of the
-  // old separate SVG bar chart -- one display instead of two for "when can
-  // I leave," and it's the same display that already has to compute the
-  // real HW/LW timing anyway.
-  function updateRouteTideCurve() {
-    var label = document.getElementById('route-tide-curve-label');
-    var canvas = document.getElementById('route-tide-curve-canvas');
-    var legend = document.getElementById('route-tide-curve-legend');
-    if (!waypoints.length || !depthGrid) {
-      label.textContent = '—';
-      canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-      legend.innerHTML = '';
-      return;
+  // Tidal Curves panel, 2026-07-25 -- REPLACES both the old hover-triggered
+  // tide-curve-box (auto-detected nearest station to the cursor) and this
+  // route box's own auto-detected-nearest-to-departure-point curve with
+  // ONE manually-selected, checkbox-toggled panel folded into #time-box
+  // (user: "remove the window with the nearest tidal curve. This should be
+  // a separate checkbox ('Tidal Curves') ... a dropdown with all available
+  // stations ... part of the map time window, so users can scrub through
+  // the tidal curves"). Keeps the feasibility-shading behavior the old
+  // route-box widget had in Optimizer mode (see _fillFeasibilityArea) --
+  // centered on the actual recommended departure there instead of the Map
+  // Time widget (which has no per-instant meaning in that mode).
+  var tidalCurveStationSet = false; // true once a station has been picked
+  // (by the user, or the one-time auto-default below) -- after that, a
+  // route edit must never silently yank the selection out from under
+  // someone who already chose a station.
+  function populateTidalCurveStations() {
+    var sel = document.getElementById('tidal-curve-station');
+    HARBOURS.forEach(function (h, i) {
+      var o = document.createElement('option');
+      o.value = i; o.textContent = h.name;
+      sel.appendChild(o);
+    });
+  }
+  populateTidalCurveStations();
+  function updateTidalCurveWidget() {
+    if (!document.getElementById('tidal-curves-toggle').checked) return;
+    var sel = document.getElementById('tidal-curve-station');
+    // One-time default: nearest station to the route's own departure
+    // point, if a route exists and nothing's been picked yet -- otherwise
+    // leaves whatever the user (or this same default, earlier) already set.
+    if (!tidalCurveStationSet && waypoints.length) {
+      var nearest = nearestStations(waypoints[0].lat, waypoints[0].lon, 1)[0];
+      sel.value = HARBOURS.indexOf(nearest.h);
+      tidalCurveStationSet = true;
     }
-    var dep = waypoints[0];
-    var nearest = nearestStations(dep.lat, dep.lon, 1)[0];
-    label.textContent = 'Tidal curve at departure — ' + nearest.h.name + ' (' + nearest.distNm.toFixed(1) + ' nm)';
+    var h = HARBOURS[+sel.value];
+    if (!h || !depthGrid) return;
+    var canvas = document.getElementById('tidal-curve-canvas');
+    var legend = document.getElementById('tidal-curve-legend');
     var isOptimizer = appMode === 'optimizer' && !!lastOptimizerCandidates;
     var centerMs = isOptimizer && lastPickDepartureMs !== null ? lastPickDepartureMs : displayedMs;
-    drawTideCurve(canvas, nearest.h, centerMs, isOptimizer ? lastOptimizerCandidates : null);
+    drawTideCurve(canvas, h, centerMs, isOptimizer ? lastOptimizerCandidates : null);
     legend.innerHTML = isOptimizer
       ? '<span><i style="background:#1a7a1a"></i>feasible</span>' +
         '<span><i style="background:#c0392b"></i>too shallow</span>' +
         '<span><i style="background:#999"></i>no data</span>'
       : '';
   }
+  document.getElementById('tidal-curve-station').addEventListener('change', function () {
+    tidalCurveStationSet = true;
+    updateTidalCurveWidget();
+  });
+  // Shows/hides #time-box itself (visible in Live mode regardless, or in
+  // Optimizer mode only if Tidal Curves is on), its step-controls section
+  // (Live mode only -- there's no single scrubbable "map time" instant in
+  // Optimizer mode), and the tidal-curve panel (its own checkbox). Also
+  // relabels the box's header, since "Map time" doesn't apply when only the
+  // curve panel is showing in Optimizer mode.
+  function updateTimeBoxVisibility() {
+    var tidalOn = document.getElementById('tidal-curves-toggle').checked;
+    document.getElementById('time-box').style.display = (appMode === 'live' || tidalOn) ? '' : 'none';
+    document.getElementById('time-box-step-section').style.display = appMode === 'live' ? '' : 'none';
+    document.getElementById('tidal-curve-panel').style.display = tidalOn ? '' : 'none';
+    document.getElementById('time-box-label').textContent = appMode === 'live' ? 'Map time' : 'Tidal Curves';
+  }
+  document.getElementById('tidal-curves-toggle').addEventListener('change', function () {
+    updateTimeBoxVisibility();
+    updateTidalCurveWidget();
+  });
 
   // Compact icon-tile stats (2026-07-21, user request: "more with icons, not
   // too much narrative") -- four 2x2 glyph+number tiles, sourced from
@@ -2900,30 +2903,34 @@
       return;
     }
     var qs = computeQuickStats();
-    var tiles = [
-      { icon: '↔', val: qs.totalNm.toFixed(1) + ' nm', lbl: 'route' },
-      { icon: '⏱', val: qs.timeNoCurrentH.toFixed(1) + ' h', lbl: 'no current' }
-    ];
     // Fixed 2026-07-23 -- user report: the first attempt at de-duplicating
     // this from the result table's own Passage/Distance-through-water rows
     // just DROPPED tiles 3/4 in Optimizer mode, breaking the "same 4-number
     // grid" layout the user relies on and pushing those same two numbers
     // down into plain text instead. Real fix: keep the 4-tile grid in BOTH
-    // modes, but SOURCE tiles 3/4 from whichever number is actually correct
-    // for the current mode -- runOptimizer()'s own `lastPick` (the real
-    // recommended departure's passage/distance-through-water) in Optimizer
-    // mode, instead of computeQuickStats()'s separate plannedDepartureMs-
-    // anchored snapshot, which is what caused the original two-different-
-    // numbers confusion. The result table's own Passage/Distance-through-
-    // water rows were removed (see runOptimizer()) now that this grid is
-    // the one place those numbers live.
+    // modes, but SOURCE the with-current tiles from whichever number is
+    // actually correct for the current mode -- runOptimizer()'s own
+    // `lastPick` (the real recommended departure's passage/distance-
+    // through-water) in Optimizer mode, instead of computeQuickStats()'s
+    // separate plannedDepartureMs-anchored snapshot, which is what caused
+    // the original two-different-numbers confusion. The result table's own
+    // Passage/Distance-through-water rows were removed (see runOptimizer())
+    // now that this grid is the one place those numbers live.
+    var withCurrentH = null, withCurrentNm = null, hasCurrent = false;
     if (appMode === 'optimizer' && lastPick) {
-      tiles.push({ icon: '≈', val: lastPick.totalH.toFixed(2) + ' h', lbl: 'passage' });
-      tiles.push({ icon: '⇢', val: lastPick.distThroughWaterNm.toFixed(2) + ' nm', lbl: 'thru water' });
+      withCurrentH = lastPick.totalH; withCurrentNm = lastPick.distThroughWaterNm; hasCurrent = true;
     } else if (appMode !== 'optimizer' && qs.hasCurrent) {
-      tiles.push({ icon: '≈', val: qs.timeWithCurrentH.toFixed(1) + ' h', lbl: qs.rangeLabel });
-      tiles.push({ icon: '⇢', val: qs.distThroughWaterNm.toFixed(1) + ' nm', lbl: 'thru water' });
+      withCurrentH = qs.timeWithCurrentH; withCurrentNm = qs.distThroughWaterNm; hasCurrent = true;
     }
+    // Grouped by quantity (route/time) rather than interleaved by
+    // current-vs-not (2026-07-25, user request) -- with all 4 tiles present
+    // this reads as two rows in the 2x2 grid: distances on top, times below.
+    var tiles = [
+      { icon: '↔', val: qs.totalNm.toFixed(1) + ' nm', lbl: 'route, no current' }
+    ];
+    if (hasCurrent) tiles.push({ icon: '⇢', val: withCurrentNm.toFixed(2) + ' nm', lbl: 'route, with current' });
+    tiles.push({ icon: '⏱', val: qs.timeNoCurrentH.toFixed(1) + ' h', lbl: 'time, no current' });
+    if (hasCurrent) tiles.push({ icon: '≈', val: withCurrentH.toFixed(2) + ' h', lbl: 'time, with current' });
     stats.innerHTML = tiles.map(function (t) {
       return '<div class="stat-tile"><div class="icon">' + t.icon + '</div>' +
         '<div class="val">' + t.val + '</div><div class="lbl">' + t.lbl + '</div></div>';
@@ -2971,7 +2978,7 @@
     // reads runOptimizer()'s own `lastPick` for its 3rd/4th tile, which only
     // exists once runOptimizer() has actually run for this render.
     updateStatsTiles();
-    updateRouteTideCurve();
+    updateTidalCurveWidget();
     updateCoverageWarning();
   }
 
@@ -3083,81 +3090,48 @@
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
       'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
   }
-  function updatePlanDateReadouts() {
-    var hw = nearestRealHwMs(plannedDepartureMs);
-    var frac = realFracAt(plannedDepartureMs);
-    document.getElementById('ref-hw').textContent = hw ? fmtTime(hw) : '—';
-    // Reads anchorIndex (2026-07-25, was the Harlingen-only TIDE_EVENTS
-    // global) so this readout reflects whichever real station is actually
-    // anchoring the current route's calculations, not always Harlingen.
-    var events = anchorIndex.events;
-    var i = 0;
-    for (; i < events.length && events[i][0] < plannedDepartureMs; i++);
-    var idx = Math.max(1, Math.min(events.length - 1, i));
-    var rangeCm = events.length >= 2 ? Math.abs(events[idx][2] - events[idx - 1][2]) : null;
-    document.getElementById('range-readout-field').textContent =
-      rangeCm === null ? '—' : (rangeCm / 100).toFixed(2) + ' m (' + fracLabel(frac) + ')';
+  // dd.mm.yyyy readout (2026-07-25) -- see #plan-date-fmt's own CSS comment
+  // for why this is a separate label rather than restyling the native
+  // datetime-local input itself.
+  function fmtDdMmYyyy(ms) {
+    var d = new Date(ms);
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear() +
+      ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+  function updatePlanDateFmt() {
+    document.getElementById('plan-date-fmt').textContent = fmtDdMmYyyy(plannedDepartureMs);
   }
   document.getElementById('plan-date').addEventListener('change', function () {
     var ms = new Date(this.value).getTime();
     if (!isNaN(ms)) {
       plannedDepartureMs = ms;
-      // A fresh plan-date is a fresh start -- any earlier "step to next
-      // departure" progress no longer applies to it.
-      excludeDeparturesBeforeMs = null;
-      updatePlanDateReadouts();
+      updatePlanDateFmt();
       renderPanel();
     }
   });
   document.getElementById('plan-date').value = fmtDatetimeLocal(plannedDepartureMs);
-  // Fixed 2026-07-25 -- user report: this only ever stepped through the
-  // ~2 tidal cycles nearest the original plan date, then appeared "stuck"
-  // (repeated clicks kept returning to an earlier departure) instead of
-  // walking forward across multiple days. Root cause: raising
-  // excludeDeparturesBeforeMs only filters WITHIN runOptimizer()'s own
-  // fixed ±12.5h sweep window (still anchored to the original
-  // plannedDepartureMs) -- once every candidate left in that window is
-  // excluded, futureOnly()'s own degenerate fallback (see its comment)
-  // returns the FULL unfiltered list again, so the pick can silently fall
-  // back to something at or before what was just shown. Fix: after
-  // raising the cutoff, check whether the new pick actually moved forward;
-  // if not, roll plannedDepartureMs itself forward by a full window-width
-  // (25 h, tiling the next window edge-to-edge with no gap or overlap) and
-  // retry, repeating until a genuinely later pick appears or a sane lookahead
-  // cap is hit -- lets repeated clicks walk across multiple days to find a
-  // daytime/nighttime window on a later date, not just the current day.
-  var NEXT_DEPARTURE_ROLL_MS = 25 * 3600000;
-  var NEXT_DEPARTURE_MAX_HOPS = 14; // ~2 weeks of lookahead, worst case
-  document.getElementById('next-departure-btn').addEventListener('click', function () {
-    if (lastPickDepartureMs === null) return;
-    var prevPick = lastPickDepartureMs;
-    // Fixed 2026-07-23 -- user report: for a depth-constrained route (a
-    // real feasible WINDOW, not every candidate feasible), this only
-    // stepped forward 10 minutes at a time instead of jumping to the next
-    // tidal cycle, unlike the unconstrained case. Root cause: excluding
-    // just past the single picked instant still leaves the rest of that
-    // same window's candidates in play, and the next-best-margin one among
-    // them is almost always the very next 10-min sweep step -- so repeated
-    // clicks just crawled along the current window's own margin curve,
-    // never triggering the roll-forward-a-cycle fallback below (which only
-    // fires when the pick fails to move forward at all). Fix: when a
-    // window was actually recommended (lastPickWindowEndMs set), skip past
-    // its WHOLE end, not just the picked instant, so the next click can
-    // only land in a later window (or trigger the same roll-forward
-    // fallback once none remain in the current sweep) -- matching the
-    // unconstrained case's own "next tidal cycle" behavior.
-    excludeDeparturesBeforeMs = (lastPickWindowEndMs !== null ? lastPickWindowEndMs : prevPick) + 60000;
+  updatePlanDateFmt();
+  // Step by exactly one real tidal cycle, 2026-07-25 (user: "the Next
+  // possible departure should always jump to the next cycle. And add a
+  // Previous button") -- replaces the earlier window-skip/roll-forward
+  // logic (excludeDeparturesBeforeMs/lastPickWindowEndMs/a hops loop),
+  // which tried to find "the next FEASIBLE departure" and needed
+  // progressively more machinery to actually do that reliably (it crawled
+  // 10 min at a time for a depth-constrained window at first, then needed
+  // a whole roll-forward fallback for the unconstrained case). Unconditional
+  // cycle-stepping is simpler and fully predictable: always moves exactly
+  // one real M2 period (grid.m2Hours) forward or back and shows whatever
+  // result that new search window has -- feasible or not -- the same as
+  // manually retyping the plan-date picker one cycle later/earlier.
+  function stepPlanCycle(sign) {
+    plannedDepartureMs += sign * grid.m2Hours * 3600000;
+    document.getElementById('plan-date').value = fmtDatetimeLocal(plannedDepartureMs);
+    updatePlanDateFmt();
     renderPanel();
-    var hops = 0;
-    while ((lastPickDepartureMs === null || lastPickDepartureMs <= prevPick) && hops < NEXT_DEPARTURE_MAX_HOPS) {
-      plannedDepartureMs += NEXT_DEPARTURE_ROLL_MS;
-      excludeDeparturesBeforeMs = null; // fresh window at the new plan date
-      document.getElementById('plan-date').value = fmtDatetimeLocal(plannedDepartureMs);
-      updatePlanDateReadouts();
-      renderPanel();
-      hops++;
-    }
-  });
+  }
+  document.getElementById('next-departure-btn').addEventListener('click', function () { stepPlanCycle(1); });
+  document.getElementById('prev-departure-btn').addEventListener('click', function () { stepPlanCycle(-1); });
   // Keep the live route quick-stats (length/time-with-current) in sync with
   // whatever boat speed is currently dialed in -- renderPanel() is a no-op
   // harmlessly re-run if there's no route yet.
@@ -3351,7 +3325,11 @@
           shallowCount++;
           if (firstBlockNm === null) {
             firstBlockNm = sampleNm;
-            blockPoint = { lat: lat, lon: lon, ms: sampleMs, depth: depth, clearance: clearance };
+            // wpFrom/wpTo (2026-07-25): the leg's own two waypoint numbers
+            // (1-based, matching the waypoint list's own display numbering)
+            // -- lets the result panel say "near waypoint N" instead of raw
+            // coordinates (user request: "remove the coordinate info").
+            blockPoint = { lat: lat, lon: lon, ms: sampleMs, depth: depth, clearance: clearance, wpFrom: i, wpTo: i + 1 };
           }
         }
       }
@@ -3389,12 +3367,19 @@
   // information is the departure time (window) - highlight better") --
   // pulled out of the result table into its own high-contrast block instead
   // of competing with the other figures as just another row.
-  function depCallout(ms, offsetMin, warn) {
+  function depCallout(ms, offsetMin, warn, label) {
     return '<div class="dep-callout' + (warn ? ' warn' : '') + '">' +
-      '<div class="dep-callout-label">Depart</div>' +
+      '<div class="dep-callout-label">' + (label || 'Depart') + '</div>' +
       '<div class="dep-callout-time">' + fmtTime(ms) + '</div>' +
       '<div class="dep-callout-offset">(' + fmtOffset(offsetMin) + ')</div>' +
       '</div>';
+  }
+  // Depth-constraint LED (2026-07-25, replaces the old top status line +
+  // constraint-badge text combo with one compact traffic-light -- see
+  // #depth-led's own CSS comment for the exact 3-tier rule.
+  function depthLedHtml(state, text) {
+    var color = state === 'green' ? '#1a7a1a' : state === 'amber' ? '#e08a00' : '#c0392b';
+    return '<span class="led-dot" style="background:' + color + '"></span>' + text;
   }
 
   // Mode 2 per-waypoint schedule labels (2026-07-23, user's own two-mode
@@ -3471,8 +3456,11 @@
       // Clear stale output from a previous, longer route rather than
       // leaving it displayed once the route drops below 2 waypoints.
       document.getElementById('result').innerHTML = '';
+      document.getElementById('depth-led').innerHTML = '';
       lastOptimizerCandidates = null;
       lastPick = null;
+      document.getElementById('next-departure-btn').disabled = true;
+      document.getElementById('prev-departure-btn').disabled = true;
       clearRouteOverlays();
       setConstraintMarker(null);
       clearWaypointAnnotations();
@@ -3534,7 +3522,7 @@
       r.distThroughWaterNm = stwKn * r.totalH;
       candidates.push(r);
     }
-    // Shared with updateRouteTideCurve()'s feasibility color band (see its
+    // Shared with updateTidalCurveWidget()'s feasibility color band (see its
     // own comment) -- set here, unconditionally, so it reflects reality
     // regardless of which of the three result branches below actually runs.
     lastOptimizerCandidates = candidates;
@@ -3550,18 +3538,7 @@
     // literally nothing in the search window is still in the future (e.g.
     // the user picked a planning date well in the past on purpose) --
     // there's no meaningful "future" answer to give there.
-    // "Step to next possible departure" (2026-07-23, user request: "the
-    // departure time is always next in the future is great - but
-    // sometimes departure is at night... add a button to step through
-    // the next possible departures") -- excludeDeparturesBeforeMs, when
-    // set, raises the effective "now" cutoff past whatever was last
-    // recommended, so clicking the button repeatedly walks forward
-    // through consecutive feasible windows instead of always landing on
-    // the very next one. Reuses the exact same futureOnly()/isFuture()
-    // machinery already built for the "never recommend the past" fix --
-    // that fix's own `nowMs` just becomes "whichever is later, right now
-    // or the last thing the user stepped past."
-    var nowMs = Math.max(Date.now(), excludeDeparturesBeforeMs || -Infinity);
+    var nowMs = Date.now();
     function isFuture(c) { return c.departureMs >= nowMs; }
     function futureOnly(list) {
       var f = list.filter(isFuture);
@@ -3620,7 +3597,6 @@
       return value == null ? '' : '<tr><td>' + label + '</td><td>' + value + '</td></tr>';
     }
     var resultHtml, pick = null;
-    lastPickWindowEndMs = null; // no window concept unless the windows.length branch below sets one
     if (allFeasible) {
       var pickPool = futureOnly(candidates);
       // Ranked by distance through water (2026-07-25, was totalH -- see
@@ -3635,11 +3611,16 @@
         ? row('Longest distance through water in window', fmtOffset(slowest.offsetMin) + ' — ' +
             slowest.distThroughWaterNm.toFixed(2) + ' nm (' + slowest.totalH.toFixed(2) + ' h)')
         : row('Current effect', 'negligible — any departure in this window is about the same');
+      // LED (2026-07-25): every departure in the search window clears, but
+      // still amber (not green) if the margin dips below 0.5 m anywhere --
+      // "all clear" should mean comfortably clear, not just non-negative.
+      document.getElementById('depth-led').innerHTML = minMargin < 0.5
+        ? depthLedHtml('amber', 'Feasible everywhere in this window, but margin drops below 0.5 m at times')
+        : depthLedHtml('green', 'All clear — comfortable margin throughout this window');
       // Passage/Distance-through-water dropped from this table 2026-07-23 --
       // now shown in the icon-tile grid above instead (see updateStatsTiles).
       resultHtml =
-        '<div class="best">Not depth-constrained — optimum departure (shortest distance through water)</div>' +
-        depCallout(pick.departureMs, pick.offsetMin, false) +
+        depCallout(pick.departureMs, pick.offsetMin, false, 'Optimum departure') +
         '<table>' +
         row('Min. clearance in window', minMargin.toFixed(2) + ' m') +
         slowerRow +
@@ -3679,11 +3660,15 @@
       });
       pick = bestWindow.best;
       lastPick = pick; // icon-tile grid's own passage/thru-water (updateStatsTiles)
-      // "Next possible departure" needs to skip the WHOLE window, not just
-      // this one picked instant -- see the click handler's own comment.
-      lastPickWindowEndMs = candidates[bestWindow.end].departureMs;
       var label = everDries ? 'Depth-constrained' : 'Shallow, but doesn\'t dry';
       var windowWord = everDries ? 'Mandatory window' : 'Window (not a hard tidal gate)';
+      // LED (2026-07-25): always amber here, regardless of the picked
+      // window's own margin -- by construction (this branch only runs when
+      // NOT allFeasible), some OTHER time in this same search range is
+      // genuinely infeasible, so "all clear" would be wrong even if the
+      // recommended pick itself has a comfortable margin.
+      document.getElementById('depth-led').innerHTML = depthLedHtml('amber',
+        everDries ? 'Route dries at low tide at times in this search range' : 'Route can be shallow at times in this search range');
       // Simplified 2026-07-23 (user: "a lot of redundant information and
       // bad formatting") -- dropped the separate top status line (the
       // callout's own green/red border plus the constraint badge below
@@ -3694,7 +3679,7 @@
       // Distance-through-water (now shown in the icon-tile grid above --
       // see updateStatsTiles -- instead of duplicated here as plain text).
       resultHtml =
-        depCallout(pick.departureMs, pick.offsetMin, false) +
+        depCallout(pick.departureMs, pick.offsetMin, false, 'Recommended departure') +
         '<table>' +
         row('Margin at tightest point', pick.worstClearance.toFixed(2) + ' m') +
         row(windowWord, fmtOffset(candidates[bestWindow.start].offsetMin) + ' to ' + fmtOffset(candidates[bestWindow.end].offsetMin)) +
@@ -3733,18 +3718,28 @@
       var anyKnown = candidates.some(function (c) { return !c.unknown; });
       if (!anyKnown) {
         resultHtml = 'No depth data available along this route — cannot assess feasibility.';
+        document.getElementById('depth-led').innerHTML = '';
         setConstraintMarker(null);
         clearWaypointAnnotations();
       } else {
         pick = futureOnly(candidates).reduce(function (a, b) { return b.reachedNm > a.reachedNm ? b : a; });
+        document.getElementById('depth-led').innerHTML =
+          depthLedHtml('red', 'No departure in this window clears the whole route');
+        // Redesigned 2026-07-25 (user: "change the color of the Depart time
+        // box and subtitle: Optimum departure until blockage, including
+        // distance and waypoint. Remove the coordinate info, but keep how
+        // much we are short from passing") -- the callout already turns red
+        // (warn=true) for this branch; its label now names what the time
+        // actually means here (best-effort, not a real safe departure), and
+        // the raw lat/lon "Blocked near" row is replaced by the blocking
+        // leg's own waypoint numbers (see simulateRoute's wpFrom/wpTo).
+        var wpText = pick.blockPoint ? ' (near waypoint ' + pick.blockPoint.wpFrom + '–' + pick.blockPoint.wpTo + ')' : '';
         resultHtml =
-          '<div class="worst">No departure in this window clears the whole route</div>' +
-          depCallout(pick.departureMs, pick.offsetMin, true) +
+          depCallout(pick.departureMs, pick.offsetMin, true, 'Optimum departure until blockage') +
           '<table>' +
-          row('Reached', pick.reachedNm.toFixed(2) + ' of ' + pick.totalNm.toFixed(2) + ' nm');
+          row('Reached', pick.reachedNm.toFixed(2) + ' of ' + pick.totalNm.toFixed(2) + ' nm' + wpText);
         if (pick.blockPoint) {
-          resultHtml += row('Blocked near', pick.blockPoint.lat.toFixed(4) + ', ' + pick.blockPoint.lon.toFixed(4) +
-            ' at ' + fmtTime(pick.blockPoint.ms) + ', short ' + Math.abs(pick.blockPoint.clearance).toFixed(2) + ' m');
+          resultHtml += row('Short by', Math.abs(pick.blockPoint.clearance).toFixed(2) + ' m at ' + fmtTime(pick.blockPoint.ms));
         }
         resultHtml += '</table>';
         setConstraintMarker(pick.blockPoint, 'Blocked here',
@@ -3759,7 +3754,12 @@
 
     document.getElementById('result').innerHTML = resultHtml;
     lastPickDepartureMs = pick ? pick.departureMs : null;
-    document.getElementById('next-departure-btn').disabled = !pick;
+    // Enabled whenever a real sweep ran (regardless of whether IT found a
+    // feasible pick) -- stepping now always jumps one cycle unconditionally
+    // (see stepPlanCycle()), so there's no "no pick to step past" case any
+    // more; disabled only when there's no route/no grid at all.
+    document.getElementById('next-departure-btn').disabled = !lastOptimizerCandidates;
+    document.getElementById('prev-departure-btn').disabled = !lastOptimizerCandidates;
     if (pick) {
       // lastRefHwMs now comes from the PICKED candidate's own real anchor
       // (2026-07-25, was the sweep-wide refHwMs) -- drawRouteCore() reads
@@ -3780,18 +3780,15 @@
     });
   }
 
-  // Route line color modes (2026-07-20, user request): 'safety' (default,
-  // t10/t12's traffic-light rule) shows only a 3-tier safe/marginal/unsafe
-  // read, which hides *where* a comfortably-safe route is nonetheless
-  // shallower elsewhere -- exactly what you'd want to see to "identify
-  // critical points along the route" even when nothing is actually unsafe.
-  // 'depth' is a continuous gradient over the same per-sample data instead
-  // of a fixed threshold. A third 'speed' mode (SoG vs. STW gradient) was
-  // removed 2026-07-23 -- user's own call after using it a while ("we can
-  // remove the speed coloring for the course line ... it's not helpful");
-  // the per-leg SoG value-labels already show the same information as an
-  // actual number, which is what people actually read it from.
-  var colorMode = 'safety';
+  // Route line coloring (2026-07-20): t10/t12's safety traffic-light rule
+  // (green/orange/red vs. required depth). A 'depth' continuous-gradient
+  // mode and a 'speed' mode both existed at various points but were
+  // removed by the user's own later calls -- 'speed' on 2026-07-23 ("it's
+  // not helpful," the per-leg SoG labels already show the same info as a
+  // real number), 'depth' on 2026-07-25 ("only use the safety mode") once
+  // the Shallowest/Deepest infobox below made the gradient mode's actual
+  // motivating question ("where's the tightest point on this passage?")
+  // answerable with plain numbers instead of a whole second color mode.
   var lastDrawDepartureMs = null, lastDrawFrac = null, lastDrawRequired = null, lastDrawStwKn = null;
   var lastMinDepth = null, lastMaxDepth = null;
   // Flattened per-sample {lat, lon, ms} points from the currently-drawn
@@ -3801,46 +3798,14 @@
   // own comment for the bug this fixes.
   var lastRoutePts = [];
 
-  // Scaled to THIS route's own actual min/max depth (not a fixed scale) --
-  // maximizes contrast for spotting the relatively shallowest stretch of
-  // *this* passage, which is the point of the feature, rather than
-  // compressing everything into one bucket on a route that's uniformly
-  // deep or uniformly shallow.
-  function depthGradientColor(depth, minD, maxD) {
-    if (depth === null || depth === undefined) return '#888';
-    var t = maxD > minD ? (depth - minD) / (maxD - minD) : 0.5;
-    t = Math.max(0, Math.min(1, t));
-    var hue = t * 220; // 0=red (shallowest/critical) .. 220=blue (deepest)
-    return 'hsl(' + hue.toFixed(0) + ',82%,42%)';
+  // Shallowest/deepest infobox (2026-07-25, replaces the removed Depth
+  // color-mode's own legend text with a plain, always-visible readout of
+  // the same lastMinDepth/lastMaxDepth numbers).
+  function updateDepthRangeInfo() {
+    var el = document.getElementById('depth-range-info');
+    el.textContent = lastMinDepth === null ? '' :
+      'Shallowest: ' + lastMinDepth.toFixed(2) + ' m · Deepest: ' + lastMaxDepth.toFixed(2) + ' m';
   }
-  function updateColorModeLegend() {
-    var el = document.getElementById('color-mode-legend');
-    if (colorMode === 'depth') {
-      el.textContent = (lastMinDepth !== null)
-        ? 'Red = shallowest on this passage (' + lastMinDepth.toFixed(2) + ' m), blue = deepest (' + lastMaxDepth.toFixed(2) + ' m).'
-        : 'Red = shallowest point on this passage, blue = deepest.';
-    } else {
-      el.textContent = 'Green = clears required depth, orange = within 0.3 m, red = short.';
-    }
-  }
-  document.querySelectorAll('.colormode-btn').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      colorMode = btn.dataset.mode;
-      document.querySelectorAll('.colormode-btn').forEach(function (b) { b.classList.toggle('active', b === btn); });
-      // Mode 1 (Live) never sets lastDrawDepartureMs (drawRouteCore leaves
-      // it null for a snapshot draw, see its own comment) -- redraw via
-      // drawRouteSnapshot() there instead, or this button would silently do
-      // nothing until the next time-control step in Live mode (2026-07-23).
-      if (appMode === 'live') {
-        drawRouteSnapshot(displayedMs);
-      } else if (lastDrawDepartureMs !== null) {
-        drawRouteForDeparture(lastDrawDepartureMs, lastDrawFrac, lastDrawRequired, lastDrawStwKn);
-      } else {
-        updateColorModeLegend();
-      }
-    });
-  });
-  updateColorModeLegend();
 
   // Mode 1 (Live) vs. Mode 2 (Optimizer) toggle (2026-07-23) -- see
   // #mode-row's CSS comment for the motivating bug and the two modes'
@@ -3849,31 +3814,44 @@
   // "too much text, needs scrolling" complaint); Mode 2 does the opposite
   // and additionally needs a fresh runOptimizer() call to populate the
   // per-waypoint schedule labels a route may not have had yet.
+  // Single toggle button, 2026-07-25 (user: "the button size changes when
+  // switching between Live and Calculated - simplify this into one toggle
+  // button") -- was two side-by-side buttons of very different label
+  // lengths, which made the row wrap differently (and so visibly resize)
+  // between modes; one button showing the CURRENT mode's own label, that
+  // toggles to the other mode on click, has nothing to visually jump.
+  function updateModeToggleButton() {
+    var btn = document.getElementById('mode-toggle-btn');
+    if (appMode === 'live') {
+      btn.textContent = '🕐 Live (map time)';
+      btn.title = 'Route reflects the Map Time widget\'s instant. Click to switch to Calculated mode (search departure times).';
+    } else {
+      btn.textContent = '▶ Calculated (departure search)';
+      btn.title = 'Searches departure times, labels each waypoint with its safe window. Click to switch to Live mode.';
+    }
+  }
   function setAppMode(mode) {
     appMode = mode;
-    document.getElementById('mode-live-btn').classList.toggle('active', mode === 'live');
-    document.getElementById('mode-calc-btn').classList.toggle('active', mode === 'optimizer');
-    document.getElementById('time-box').style.display = mode === 'live' ? '' : 'none';
+    updateModeToggleButton();
+    updateTimeBoxVisibility();
     document.getElementById('dep-search').style.display = mode === 'optimizer' ? 'block' : 'none';
-    // route-tide-curve now shows in BOTH modes (2026-07-23) -- repurposed as
-    // the departure feasibility display in Optimizer mode (see
-    // updateRouteTideCurve()'s own comment), so it's no longer Live-mode-only
+    // The tidal-curve panel shows in BOTH modes (2026-07-23, repurposed
+    // 2026-07-25 -- see updateTimeBoxVisibility()'s and
+    // updateTidalCurveWidget()'s own comments) as the departure feasibility
+    // display in Optimizer mode, so it's no longer Live-mode-only
     // scaffolding to hide away.
     if (mode === 'live') {
       clearWaypointAnnotations();
       document.getElementById('result').innerHTML = '';
+      document.getElementById('depth-led').innerHTML = '';
       lastOptimizerCandidates = null;
       lastPick = null;
-    } else {
-      // Re-entering Optimizer mode (e.g. re-clicking "Calculate" after a
-      // previous session of stepping through departures) starts fresh from
-      // the nearest future departure again, not wherever "Next" had reached.
-      excludeDeparturesBeforeMs = null;
     }
     renderPanel();
   }
-  document.getElementById('mode-live-btn').addEventListener('click', function () { setAppMode('live'); });
-  document.getElementById('mode-calc-btn').addEventListener('click', function () { setAppMode('optimizer'); });
+  document.getElementById('mode-toggle-btn').addEventListener('click', function () {
+    setAppMode(appMode === 'live' ? 'optimizer' : 'live');
+  });
 
   // Colors the route for the chosen departure and adds a SoG label at each
   // leg's midpoint -- green if faster than STW, red if slower. Replaces the
@@ -3899,6 +3877,8 @@
     lastDrawFrac = frac; lastDrawRequired = required; lastDrawStwKn = stwKn;
     if (waypoints.length < 2) {
       lastRoutePts = [];
+      lastMinDepth = null; lastMaxDepth = null;
+      updateDepthRangeInfo();
       if (snapshotMs != null) setConstraintMarker(null);
       return;
     }
@@ -3946,18 +3926,13 @@
     });
     lastMinDepth = depths.length ? Math.min.apply(null, depths) : null;
     lastMaxDepth = depths.length ? Math.max.apply(null, depths) : null;
-    updateColorModeLegend();
+    updateDepthRangeInfo();
 
     legs.forEach(function (leg) {
       var pts = leg.pts;
       for (var s = 0; s < pts.length - 1; s++) {
-        var color;
-        if (colorMode === 'depth') {
-          color = depthGradientColor(pts[s].depth, lastMinDepth, lastMaxDepth);
-        } else {
-          var depth = pts[s].depth;
-          color = depth === null ? '#888' : (depth >= required ? '#1a7a1a' : (depth >= required - 0.3 ? '#e08a00' : '#c0392b'));
-        }
+        var depth = pts[s].depth;
+        var color = depth === null ? '#888' : (depth >= required ? '#1a7a1a' : (depth >= required - 0.3 ? '#e08a00' : '#c0392b'));
         var seg = L.polyline([[pts[s].lat, pts[s].lon], [pts[s + 1].lat, pts[s + 1].lon]],
           { color: color, weight: 5 }).addTo(map);
         depthSegments.push(seg);
