@@ -81,16 +81,16 @@ see the troubleshooting note below if you want to retry it anyway).**
 
 The 6 files that live in R2 must NOT be included in this upload (Pages
 still rejects any individual file over 25 MiB, even on a direct CLI
-deploy) — temporarily move them out, deploy, then move them back:
+deploy) — **`redeploy.ps1`** (in this directory) automates moving them out,
+deploying, and moving them back, so this is normally just:
 
 ```
-mkdir /tmp/r2_stash
-mv current_grid_de.bin current_grid.bin water_level_grid_de.bin water_level_grid.bin enc_soundg_native_t17.js enc_features_t17.js /tmp/r2_stash/
-wrangler pages project create <your-project-name> --production-branch=main
-wrangler pages deploy . --project-name=<your-project-name> --commit-dirty=true
-mv /tmp/r2_stash/* .
-rmdir /tmp/r2_stash
+wrangler pages project create tidal-planner --production-branch=main   # only needed once, the first time
+.\redeploy.ps1
 ```
+
+(`redeploy.ps1` hardcodes the project name `tidal-planner` — edit that one
+line near the bottom if you named yours differently.)
 
 This also picks up the `wrangler.toml` in this directory, which declares
 the R2 binding (`TIDAL_DATA` → your bucket, see that file) — no separate
@@ -98,9 +98,9 @@ dashboard step needed for the binding either, as long as the bucket name
 in `wrangler.toml` matches what you actually created in step 2.
 Cloudflare assigns a free `<project-name>.pages.dev` URL.
 
-**To re-deploy after any code change**: repeat the stash/deploy/restore
-three lines above (`wrangler pages project create` only needs to run
-once, the first time).
+**To re-deploy after any code/UI change, once the project exists**: just
+run `.\redeploy.ps1` again — verified working end to end (see its own
+comment for what it does and why the stash step is needed at all).
 
 **Optional, for auto-redeploy on `git push`**: Dashboard → **Workers &
 Pages** → your project → **Settings** → **Builds** → connect it to the
