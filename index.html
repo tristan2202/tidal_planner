@@ -196,6 +196,26 @@
   }
   #dep-step-row button:hover:not(:disabled) { background: #e8edf1; }
   #dep-step-row button:disabled { color: #aaa; border-color: #ccc; cursor: default; }
+  /* Optimizer 3-way strategy radio group (2026-07-25, user request) --
+     'auto' is the original ±12.5h fastest/safest sweep; 'departure'/
+     'arrival' let the user pick their own instant via the reused #time-box
+     stepper instead (see updateTimeBoxVisibility()'s own comment). */
+  #optimizer-mode-row { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; }
+  #optimizer-mode-row label { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #333; cursor: pointer; }
+  /* Step-through waypoint preview (2026-07-25, replaces the old permanent
+     per-waypoint map tooltips -- see updatePreviewPanel()'s own comment for
+     the clutter this fixes). Hidden (via JS display:none) whenever there's
+     no valid schedule to step through. */
+  #route-preview { margin-top: 8px; padding-top: 8px; border-top: 1px solid #e3e3e3; }
+  #route-preview-controls { display: flex; align-items: center; gap: 8px; }
+  #route-preview-controls button {
+    padding: 4px 10px; font-size: 13px;
+    border: 1px solid #16324a; background: #fff; color: #16324a; border-radius: 4px; cursor: pointer;
+  }
+  #route-preview-controls button:hover:not(:disabled) { background: #e8edf1; }
+  #route-preview-controls button:disabled { color: #aaa; border-color: #ccc; cursor: default; }
+  #route-preview-label { flex: 1; text-align: center; font-size: 12px; font-weight: 600; color: #16324a; }
+  #route-preview-info { margin-top: 4px; font-size: 12px; color: #333; }
   .row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
   .row label { flex: 1; font-size: 12px; color: #444; }
   .row input[type=number] { width: 70px; box-sizing: border-box; padding: 3px 5px; font-size: 13px; }
@@ -239,11 +259,6 @@
   #result table td { padding: 2px 4px 2px 0; vertical-align: top; }
   #result table td:first-child { color: #444; white-space: nowrap; }
   #result table td:last-child { font-weight: 600; color: #222; }
-  /* Mode 2 per-waypoint schedule labels (2026-07-23) -- small permanent
-     Leaflet tooltips pinned next to each waypoint marker, replacing the
-     single global departure readout with per-point timing once "Calculate
-     safe/fast route time" has run. */
-  .wp-time-tt { font-size: 10px; line-height: 1.35; padding: 2px 5px; }
   #wplist {
     list-style: none; margin: 8px 0 0; padding: 0;
     overflow-y: auto; flex: 1 1 auto; min-height: 0;
@@ -383,7 +398,7 @@
       <button id="btn-clear">Clear</button>
       <button id="btn-export">Export</button>
       <button id="btn-import">Import</button>
-      <input type="file" id="file-import" accept="application/json" style="display:none">
+      <input type="file" id="file-import" accept=".gpx,.json,application/gpx+xml,application/json" style="display:none">
     </div>
   </div>
   <div id="grid-status">Loading grids (NL + Germany, ~450 MB, first load takes ~20-30s)…</div>
@@ -396,11 +411,24 @@
   <div id="stats"></div>
   <div id="coverage-warning"></div>
   <div id="dep-search">
+    <div id="optimizer-mode-row">
+      <label><input type="radio" name="opt-mode" value="auto" checked> Optimum (fastest)</label>
+      <label><input type="radio" name="opt-mode" value="departure"> Pick departure time</label>
+      <label><input type="radio" name="opt-mode" value="arrival"> Pick arrival time</label>
+    </div>
     <div id="depth-led"></div>
     <div id="result"></div>
     <div id="dep-step-row">
       <button id="prev-departure-btn" disabled>⏮ Previous cycle</button>
       <button id="next-departure-btn" disabled>Next cycle ⏭</button>
+    </div>
+    <div id="route-preview" style="display:none">
+      <div id="route-preview-controls">
+        <button id="preview-prev">◀</button>
+        <span id="route-preview-label"></span>
+        <button id="preview-next">▶</button>
+      </div>
+      <div id="route-preview-info"></div>
     </div>
   </div>
   <div id="constraint-badge"></div>
@@ -2430,8 +2458,22 @@
   function fmtDisplayedTime(ms) {
     return new Date(ms).toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
+  // Whichever instant the reused #time-box stepper is currently editing
+  // (2026-07-25) -- displayedMs in Live mode (unchanged), or
+  // manualDepartureMs/manualArrivalMs in the optimizer's 'departure'/
+  // 'arrival' sub-modes. One getter so the display text and the step/now
+  // button handlers below can't drift out of sync on which variable is
+  // "active" for the current mode.
+  function activeTimeBoxMs() {
+    if (appMode === 'optimizer' && optimizerSubMode === 'departure') return manualDepartureMs;
+    if (appMode === 'optimizer' && optimizerSubMode === 'arrival') return manualArrivalMs;
+    return displayedMs;
+  }
+  function updateTimeBoxDisplayText() {
+    document.getElementById('time-box-display').textContent = fmtDisplayedTime(activeTimeBoxMs());
+  }
   function updateTimeDisplay() {
-    document.getElementById('time-box-display').textContent = fmtDisplayedTime(displayedMs);
+    updateTimeBoxDisplayText();
     // Real bug, found 2026-07-23 investigating a "tidal curve changes shape
     // when stepping time" report: this call was ALWAYS missing -- the global
     // refHwMs was documented ("refreshed by refreshRefHw() every time
@@ -2466,10 +2508,27 @@
     displayedMs += minutes * 60000;
     updateTimeDisplay();
   }
-  document.getElementById('time-back-1h').addEventListener('click', function () { stepTime(-60); });
-  document.getElementById('time-back-15m').addEventListener('click', function () { stepTime(-TIME_STEP_MIN); });
-  document.getElementById('time-fwd-15m').addEventListener('click', function () { stepTime(TIME_STEP_MIN); });
-  document.getElementById('time-fwd-1h').addEventListener('click', function () { stepTime(60); });
+  // Generalizes the step buttons across all three things the reused
+  // #time-box stepper can now edit (2026-07-25) -- Live mode keeps its
+  // exact original stepTime()/updateTimeDisplay() path unchanged;
+  // 'departure'/'arrival' instead adjust their own manual instant and
+  // re-run renderPanel() (which dispatches to runManualDeparture()/
+  // runManualArrival() and refreshes the tidal curve + display text).
+  function stepSelectedTime(minutes) {
+    if (appMode === 'optimizer' && optimizerSubMode === 'departure') {
+      manualDepartureMs += minutes * 60000;
+      renderPanel();
+    } else if (appMode === 'optimizer' && optimizerSubMode === 'arrival') {
+      manualArrivalMs += minutes * 60000;
+      renderPanel();
+    } else {
+      stepTime(minutes);
+    }
+  }
+  document.getElementById('time-back-1h').addEventListener('click', function () { stepSelectedTime(-60); });
+  document.getElementById('time-back-15m').addEventListener('click', function () { stepSelectedTime(-TIME_STEP_MIN); });
+  document.getElementById('time-fwd-15m').addEventListener('click', function () { stepSelectedTime(TIME_STEP_MIN); });
+  document.getElementById('time-fwd-1h').addEventListener('click', function () { stepSelectedTime(60); });
   // "Jump to the actual current time" (2026-07-23, replaces the old
   // "jump to recommended departure" ⏵ button, user request: "the map time
   // window does not need a play button... replaced with a jump to actual
@@ -2479,9 +2538,19 @@
   // null by design, see its own comment) -- since the time-box only shows
   // in Live mode, clicking it there had literally never done anything.
   // "Jump to now" is both the requested feature and a fix for that.
+  // Generalized 2026-07-25 to jump whichever instant is currently active
+  // (same reasoning as stepSelectedTime above).
   document.getElementById('time-goto-now').addEventListener('click', function () {
-    displayedMs = Date.now();
-    updateTimeDisplay();
+    if (appMode === 'optimizer' && optimizerSubMode === 'departure') {
+      manualDepartureMs = Date.now();
+      renderPanel();
+    } else if (appMode === 'optimizer' && optimizerSubMode === 'arrival') {
+      manualArrivalMs = Date.now();
+      renderPanel();
+    } else {
+      displayedMs = Date.now();
+      updateTimeDisplay();
+    }
   });
 
   // Drag-to-move, plain left/top (px) rather than the app's usual
@@ -2523,6 +2592,19 @@
   // and by setAppMode() (which shows/hides the Map Time widget and the
   // departure-search block accordingly).
   var appMode = 'live';
+  // Optimizer mode's own 3-way strategy (2026-07-25, user request): 'auto'
+  // (the original ±12.5h fastest/safest sweep, runOptimizer() below),
+  // 'departure' (project the route from a manually-picked departure
+  // instant -- "I need a certain water depth in the departure harbour to
+  // leave"), 'arrival' (back-solve a departure instant that makes the
+  // route's LAST waypoint arrive at a manually-picked instant -- "I have
+  // to arrive at a certain harbour at high tide"). manualDepartureMs/
+  // manualArrivalMs are stepped by the reused #time-box widget (see
+  // stepSelectedTime()) -- sticky across route edits, same "don't fight
+  // the user mid-scrub" precedent as plannedDepartureMs/displayedMs.
+  var optimizerSubMode = 'auto';
+  var manualDepartureMs = Date.now();
+  var manualArrivalMs = Date.now();
   var waypoints = [];
   var markers = [];
   var polyline = L.polyline([], { color: '#999', weight: 2, dashArray: '4,4' }).addTo(map);
@@ -2895,9 +2977,21 @@
   // centered on the actual recommended departure there instead of the Map
   // Time widget (which has no per-instant meaning in that mode).
   var tidalCurveStationSet = false; // true once a station has been picked
-  // (by the user, or the one-time auto-default below) -- after that, a
-  // route edit must never silently yank the selection out from under
-  // someone who already chose a station.
+  // (by the user, or the auto-default below) -- after that, a route EDIT
+  // (drag, insert, STW change, ...) must never silently yank the selection
+  // out from under someone who already chose a station. Re-armed below
+  // whenever the route starts fresh from empty, so a brand-new departure
+  // point still gets a fresh auto-jump (2026-07-25, user request).
+  var _lastHadRoute = false;
+  // Shared empty->nonempty transition hook (2026-07-25, generalized from
+  // the tidal-curve-station auto-jump above to also cover the new
+  // departure/arrival preview's own previewIndex) -- one place resetting
+  // everything that should "forget" a finished route once a brand new one
+  // starts, instead of three separate transition checks drifting apart.
+  function _onRouteRestarted() {
+    tidalCurveStationSet = false;
+    previewIndex = 0;
+  }
   function populateTidalCurveStations() {
     var sel = document.getElementById('tidal-curve-station');
     HARBOURS.forEach(function (h, i) {
@@ -2908,13 +3002,29 @@
   }
   populateTidalCurveStations();
   function updateTidalCurveWidget() {
+    // Re-arm the auto-default whenever the route transitions from empty to
+    // non-empty (2026-07-25, user: "when selecting a certain harbour or
+    // setting the first waypoint, the tidal curve display should jump to
+    // the nearest station") -- picking a harbour via "Start from" or a map
+    // click both start from waypoints.length===0, so this catches "setting
+    // the first waypoint" precisely without re-triggering on every drag of
+    // an already-existing departure point (which would fight a deliberate
+    // manual station pick).
+    var hasRoute = waypoints.length > 0;
+    if (hasRoute && !_lastHadRoute) _onRouteRestarted();
+    _lastHadRoute = hasRoute;
     if (!document.getElementById('tidal-curves-toggle').checked) return;
     var sel = document.getElementById('tidal-curve-station');
-    // One-time default: nearest station to the route's own departure
-    // point, if a route exists and nothing's been picked yet -- otherwise
+    // Auto-default: nearest station to the route's own departure point
+    // (arrival point instead, in 'arrival' sub-mode -- 2026-07-25, "select
+    // an arrival time by clicking on the tidal curve for the station next
+    // to the last point of the route"), if a route exists and nothing's
+    // been picked yet (either never, or just re-armed above) -- otherwise
     // leaves whatever the user (or this same default, earlier) already set.
     if (!tidalCurveStationSet && waypoints.length) {
-      var nearest = nearestStations(waypoints[0].lat, waypoints[0].lon, 1)[0];
+      var refPt = (appMode === 'optimizer' && optimizerSubMode === 'arrival')
+        ? waypoints[waypoints.length - 1] : waypoints[0];
+      var nearest = nearestStations(refPt.lat, refPt.lon, 1)[0];
       sel.value = HARBOURS.indexOf(nearest.h);
       tidalCurveStationSet = true;
     }
@@ -2923,7 +3033,14 @@
     var canvas = document.getElementById('tidal-curve-canvas');
     var legend = document.getElementById('tidal-curve-legend');
     var isOptimizer = appMode === 'optimizer' && !!lastOptimizerCandidates;
-    var centerMs = isOptimizer && lastPickDepartureMs !== null ? lastPickDepartureMs : displayedMs;
+    // Manual departure/arrival sub-modes (2026-07-25): center the curve on
+    // whichever instant the reused time-box stepper currently holds, not
+    // on the auto-search's own lastPickDepartureMs -- since the curve
+    // already draws a "now" dot at centerMs, this marks the user's picked
+    // instant on the real tide shape for free, with zero new drawing code.
+    var centerMs = appMode === 'optimizer' && optimizerSubMode === 'departure' ? manualDepartureMs
+      : appMode === 'optimizer' && optimizerSubMode === 'arrival' ? manualArrivalMs
+      : (isOptimizer && lastPickDepartureMs !== null ? lastPickDepartureMs : displayedMs);
     drawTideCurve(canvas, h, centerMs, isOptimizer ? lastOptimizerCandidates : null);
     legend.innerHTML = isOptimizer
       ? '<span><i style="background:#1a7a1a"></i>feasible</span>' +
@@ -2935,18 +3052,28 @@
     tidalCurveStationSet = true;
     updateTidalCurveWidget();
   });
-  // Shows/hides #time-box itself (visible in Live mode regardless, or in
-  // Optimizer mode only if Tidal Curves is on), its step-controls section
-  // (Live mode only -- there's no single scrubbable "map time" instant in
-  // Optimizer mode), and the tidal-curve panel (its own checkbox). Also
-  // relabels the box's header, since "Map time" doesn't apply when only the
-  // curve panel is showing in Optimizer mode.
+  // Shows/hides #time-box itself (visible in Live mode regardless, in the
+  // 'departure'/'arrival' optimizer sub-modes regardless -- see below --
+  // or in Optimizer 'auto' only if Tidal Curves is checked), its step-
+  // controls section (Live mode, or 'departure'/'arrival' where it drives
+  // manualDepartureMs/manualArrivalMs instead of displayedMs -- see
+  // stepSelectedTime()), and the tidal-curve panel. Also relabels the
+  // box's header for whichever instant the stepper is currently editing.
   function updateTimeBoxVisibility() {
     var tidalOn = document.getElementById('tidal-curves-toggle').checked;
-    document.getElementById('time-box').style.display = (appMode === 'live' || tidalOn) ? '' : 'none';
-    document.getElementById('time-box-step-section').style.display = appMode === 'live' ? '' : 'none';
-    document.getElementById('tidal-curve-panel').style.display = tidalOn ? '' : 'none';
-    document.getElementById('time-box-label').textContent = appMode === 'live' ? 'Map time' : 'Tidal Curves';
+    // 'departure'/'arrival' force the curve panel on regardless of the
+    // checkbox (2026-07-25) -- the whole point of these sub-modes is
+    // looking at the tide before picking a time, so hiding it behind an
+    // easy-to-forget checkbox would defeat the feature.
+    var manualMode = appMode === 'optimizer' && (optimizerSubMode === 'departure' || optimizerSubMode === 'arrival');
+    var showCurve = tidalOn || manualMode;
+    document.getElementById('time-box').style.display = (appMode === 'live' || showCurve) ? '' : 'none';
+    document.getElementById('time-box-step-section').style.display = (appMode === 'live' || manualMode) ? '' : 'none';
+    document.getElementById('tidal-curve-panel').style.display = showCurve ? '' : 'none';
+    document.getElementById('time-box-label').textContent =
+      appMode === 'live' ? 'Map time' :
+      optimizerSubMode === 'departure' ? 'Departure time' :
+      optimizerSubMode === 'arrival' ? 'Arrival time' : 'Tidal Curves';
   }
   document.getElementById('tidal-curves-toggle').addEventListener('change', function () {
     updateTimeBoxVisibility();
@@ -2999,8 +3126,8 @@
       { icon: '↔', val: qs.totalNm.toFixed(1) + ' nm', lbl: 'route, no current' }
     ];
     if (hasCurrent) tiles.push({ icon: '⇢', val: withCurrentNm.toFixed(2) + ' nm', lbl: 'route, with current' });
-    tiles.push({ icon: '⏱', val: qs.timeNoCurrentH.toFixed(1) + ' h', lbl: 'time, no current' });
-    if (hasCurrent) tiles.push({ icon: '≈', val: withCurrentH.toFixed(2) + ' h', lbl: 'time, with current' });
+    tiles.push({ icon: '⏱', val: fmtDurationHM(qs.timeNoCurrentH), lbl: 'time, no current' });
+    if (hasCurrent) tiles.push({ icon: '≈', val: fmtDurationHM(withCurrentH), lbl: 'time, with current' });
     stats.innerHTML = tiles.map(function (t) {
       return '<div class="stat-tile"><div class="icon">' + t.icon + '</div>' +
         '<div class="val">' + t.val + '</div><div class="lbl">' + t.lbl + '</div></div>';
@@ -3033,15 +3160,20 @@
     // Auto-run on every route edit, drag (see the 'drag' handler above), and
     // STW/planning-date/time-control change -- kept as one choke point
     // (renderPanel is already called from all of those) rather than adding
-    // the same call in several places. Which one runs depends on the
-    // Mode 1/Mode 2 toggle (2026-07-23, see #mode-row's CSS comment):
-    // Mode 1 ('live') just freezes every sample to the Map Time widget's
-    // instant (drawRouteSnapshot, cheap, no ±window search); Mode 2
-    // ('optimizer') runs the full departure-time sweep (runOptimizer() is
+    // the same call in several places. Which one runs depends on appMode/
+    // optimizerSubMode (2026-07-23, extended 2026-07-25 to 3 sub-modes, see
+    // #optimizer-mode-row's own comment): Live just freezes every sample to
+    // the Map Time widget's instant (drawRouteSnapshot, cheap, no search);
+    // Optimizer 'auto' runs the full departure-time sweep (runOptimizer(),
     // itself cheap -- a few hundred simulateRoute() calls, sub-100ms for
-    // typical route lengths, see Claude.md for the measured figure) and
-    // labels each waypoint with its own safe/fast window.
-    if (appMode === 'optimizer') runOptimizer(); else drawRouteSnapshot(displayedMs);
+    // typical route lengths); 'departure'/'arrival' each do a single (or,
+    // for 'arrival', a handful of iterated) simulateRoute() call instead --
+    // see runManualDeparture()/runManualArrival().
+    if (appMode === 'optimizer') {
+      if (optimizerSubMode === 'departure') runManualDeparture();
+      else if (optimizerSubMode === 'arrival') runManualArrival();
+      else runOptimizer();
+    } else drawRouteSnapshot(displayedMs);
     // updateStatsTiles() moved to AFTER the mode branch above (2026-07-23,
     // user report: "the 4 numbers ... are split between route/no-current in
     // the grid and route/thru-water in text") -- in Optimizer mode it now
@@ -3049,6 +3181,7 @@
     // exists once runOptimizer() has actually run for this render.
     updateStatsTiles();
     updateTidalCurveWidget();
+    updateTimeBoxDisplayText();
     updateCoverageWarning();
   }
 
@@ -3115,29 +3248,85 @@
   });
 
   document.getElementById('btn-clear').addEventListener('click', function () { waypoints = []; render(); });
+
+  // GPX export (2026-07-25, replaces the old JSON export -- user request:
+  // "export a GPX file with a proper file selector dialogue"). GPX is the
+  // universal interchange format every real chartplotter/app checked
+  // supports (OpenCPN, AvNav, Garmin, AquaMap -- see Claude.md's Planned
+  // architecture #1), unlike this app's own ad-hoc JSON shape. A route is
+  // exported as a single <rte> of <rtept> points, in order.
+  function buildGpx(wps) {
+    var pts = wps.map(function (w, i) {
+      return '<rtept lat="' + w.lat + '" lon="' + w.lon + '"><name>WP' + (i + 1) + '</name></rtept>';
+    }).join('');
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<gpx version="1.1" creator="Tidal Router" xmlns="http://www.topografix.com/GPX/1/1">\n' +
+      '<rte><name>Tidal Router route</name>' + pts + '</rte>\n' +
+      '</gpx>\n';
+  }
   document.getElementById('btn-export').addEventListener('click', function () {
-    var data = JSON.stringify({ version: 1, waypoints: waypoints }, null, 2);
-    var blob = new Blob([data], { type: 'application/json' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'tidal-route.json';
-    a.click();
-    URL.revokeObjectURL(a.href);
+    var gpx = buildGpx(waypoints);
+    // "a proper file selector dialogue" -- the File System Access API's
+    // showSaveFilePicker() gives a real OS Save-As dialog (choose name AND
+    // location), unlike the classic Blob+<a download> trick, which always
+    // silently drops the file in the browser's fixed downloads folder with
+    // no dialog at all. Only available in Chromium-based browsers over
+    // HTTPS/localhost -- falls back to the classic approach everywhere
+    // else so export still works, just without the dialog.
+    if (window.showSaveFilePicker) {
+      window.showSaveFilePicker({
+        suggestedName: 'tidal-route.gpx',
+        types: [{ description: 'GPX route', accept: { 'application/gpx+xml': ['.gpx'] } }]
+      }).then(function (handle) {
+        return handle.createWritable().then(function (w) { return w.write(gpx).then(function () { return w.close(); }); });
+      }).catch(function (err) {
+        if (err && err.name !== 'AbortError') alert('Could not save file: ' + err.message);
+      });
+    } else {
+      var blob = new Blob([gpx], { type: 'application/gpx+xml' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'tidal-route.gpx';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
   });
   document.getElementById('btn-import').addEventListener('click', function () {
     document.getElementById('file-import').click();
   });
+  // Reads real <rte>/<rtept> (this app's own export shape); falls back to
+  // plain <wpt> points if no <rte> is present, for GPX files built by hand
+  // or by a simpler tool. Track (<trk>/<trkpt>) import isn't supported --
+  // out of scope, this app exports routes, not tracks.
+  function parseGpxWaypoints(text) {
+    var doc = new DOMParser().parseFromString(text, 'application/xml');
+    if (doc.querySelector('parsererror')) throw new Error('invalid GPX/XML');
+    var pts = doc.querySelectorAll('rte > rtept');
+    if (!pts.length) pts = doc.querySelectorAll('wpt');
+    return Array.prototype.map.call(pts, function (p) {
+      return { lat: +p.getAttribute('lat'), lon: +p.getAttribute('lon') };
+    }).filter(function (w) { return !isNaN(w.lat) && !isNaN(w.lon); });
+  }
   document.getElementById('file-import').addEventListener('change', function (e) {
     var file = e.target.files[0];
     if (!file) return;
     var reader = new FileReader();
     reader.onload = function () {
       try {
-        var parsed = JSON.parse(reader.result);
-        if (!parsed || !Array.isArray(parsed.waypoints)) throw new Error('missing "waypoints" array');
-        waypoints = parsed.waypoints.map(function (w) { return { lat: +w.lat, lon: +w.lon }; });
+        var text = reader.result;
+        // Old exports were JSON (see Claude.md) -- accept both by content,
+        // not just file extension, so a renamed/re-uploaded old export
+        // still imports correctly.
+        var isGpx = /<gpx[\s>]/i.test(text.slice(0, 400));
+        var wps = isGpx ? parseGpxWaypoints(text) : (function () {
+          var parsed = JSON.parse(text);
+          if (!parsed || !Array.isArray(parsed.waypoints)) throw new Error('missing "waypoints" array');
+          return parsed.waypoints.map(function (w) { return { lat: +w.lat, lon: +w.lon }; });
+        })();
+        if (!wps.length) throw new Error('no waypoints found');
+        waypoints = wps;
         render();
-        if (waypoints.length) map.fitBounds(waypoints.map(function (w) { return [w.lat, w.lon]; }), { padding: [30, 30] });
+        map.fitBounds(waypoints.map(function (w) { return [w.lat, w.lon]; }), { padding: [30, 30] });
       } catch (err) { alert('Could not import route: ' + err.message); }
     };
     reader.readAsText(file);
@@ -3202,6 +3391,27 @@
   }
   document.getElementById('next-departure-btn').addEventListener('click', function () { stepPlanCycle(1); });
   document.getElementById('prev-departure-btn').addEventListener('click', function () { stepPlanCycle(-1); });
+  // Optimizer 3-way strategy radio group (2026-07-25, user request) -- see
+  // this doc's own plan/Claude.md for the 3 use cases. "Previous/Next
+  // cycle" (#dep-step-row) only has a clear meaning for 'auto's own ±12.5h
+  // sweep (step plannedDepartureMs, see stepPlanCycle above) -- hidden for
+  // 'departure'/'arrival', which use the reused #time-box stepper instead
+  // for exactly this purpose, at finer (15 min) granularity.
+  document.querySelectorAll('input[name="opt-mode"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      if (!this.checked) return;
+      optimizerSubMode = this.value;
+      document.getElementById('dep-step-row').style.display = optimizerSubMode === 'auto' ? '' : 'none';
+      // Stale sweep state from a previous 'auto' run must not leak into
+      // these sub-modes -- both the Prev/Next-cycle buttons' own disabled
+      // state (tied to lastOptimizerCandidates) and the tidal-curve
+      // widget's feasibility shading (isOptimizer && lastOptimizerCandidates)
+      // would otherwise still reflect the old sweep.
+      if (optimizerSubMode !== 'auto') lastOptimizerCandidates = null;
+      updateTimeBoxVisibility();
+      renderPanel();
+    });
+  });
   // Keep the live route quick-stats (length/time-with-current) in sync with
   // whatever boat speed is currently dialed in -- renderPanel() is a no-op
   // harmlessly re-run if there's no route yet.
@@ -3427,6 +3637,16 @@
     var abs = Math.abs(min);
     return sign + Math.floor(abs / 60) + 'h' + (abs % 60).toString().padStart(2, '0') + 'm';
   }
+  // Plain (unsigned) duration in hours -> "Xh YYm" (2026-07-25, user
+  // request -- the icon tiles were showing passage time as a raw fraction
+  // of hours, e.g. "1.3 h", which isn't how anyone actually reads a
+  // duration). Same hour/minute split as fmtOffset(), just without the
+  // +/- sign a duration doesn't need.
+  function fmtDurationHM(hoursFloat) {
+    var totalMin = Math.round(hoursFloat * 60);
+    var h = Math.floor(totalMin / 60), m = totalMin % 60;
+    return h + 'h ' + String(m).padStart(2, '0') + 'm';
+  }
   function fmtTime(ms) {
     return new Date(ms).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
   }
@@ -3451,25 +3671,28 @@
     var color = state === 'green' ? '#1a7a1a' : state === 'amber' ? '#e08a00' : '#c0392b';
     return '<span class="led-dot" style="background:' + color + '"></span>' + text;
   }
+  // Result-table row builder (2026-07-22, hoisted out of runOptimizer()
+  // 2026-07-25 so the new runManualDeparture()/runManualArrival() can share
+  // it too) -- one <tr>, skipped entirely when value is null/undefined so
+  // optional rows don't leave an empty cell.
+  function row(label, value) {
+    return value == null ? '' : '<tr><td>' + label + '</td><td>' + value + '</td></tr>';
+  }
 
-  // Mode 2 per-waypoint schedule labels (2026-07-23, user's own two-mode
-  // design): "the route has timing information next to the waypoints ...
-  // Line 1: Time Window (earliest - latest), Line 2: Depth at this point."
-  // waypointArrivals() re-walks the route leg by leg (same bearing/current/
-  // SOG formulas as simulateRoute()/drawRouteForDeparture(), just stopping
-  // at each waypoint instead of sampling within each leg) for one specific
-  // departure instant, returning that departure's own arrival {ms, depth}
-  // at every waypoint. Called once for the recommended window's EARLIEST
-  // departure and once for its LATEST so the two bracket a real range,
-  // plus once for the actual picked/recommended departure for the depth
-  // line (a single representative value, not a min/max of two sparse
-  // samples).
+  // Per-waypoint arrival walk, one call per departure instant. Re-walks the
+  // route leg by leg (same bearing/current/SOG formulas as simulateRoute()/
+  // drawRouteForDeparture(), just stopping at each waypoint instead of
+  // sampling within each leg), returning that departure's own arrival
+  // {ms, distNm} at every waypoint -- distNm added 2026-07-25 (cumulative
+  // distance-through-water so far, same accumulation simulateRoute() already
+  // does for its own distSoFarNm) to back the step-through preview panel
+  // below. `depth` was dropped from here the same day (see
+  // updatePreviewPanel()'s own comment -- "remove depth information," the
+  // depth chart/probe already cover that) now that this function no longer
+  // feeds the old permanent per-waypoint map tooltips.
   function waypointArrivals(departureMs, stwKn, refHwMs, frac) {
-    var out = [{
-      ms: departureMs,
-      depth: actualDepthAt(waypoints[0].lat, waypoints[0].lon, phaseHoursAt(departureMs, refHwMs, grid.m2Hours), frac)
-    }];
-    var elapsedMin = 0;
+    var out = [{ ms: departureMs, distNm: 0 }];
+    var elapsedMin = 0, distSoFarNm = 0;
     for (var i = 1; i < waypoints.length; i++) {
       var a = waypoints[i - 1], b = waypoints[i];
       var distNm = distanceNm(a, b);
@@ -3481,45 +3704,61 @@
       var alongTrackKn = cur.east * Math.sin(brgRad) + cur.north * Math.cos(brgRad);
       var sogKn = Math.max(stwKn + alongTrackKn, 0.3 * stwKn);
       elapsedMin += (distNm / sogKn) * 60;
+      distSoFarNm += distNm;
       var arrMs = departureMs + elapsedMin * 60000;
-      out.push({ ms: arrMs, depth: actualDepthAt(b.lat, b.lon, phaseHoursAt(arrMs, refHwMs, grid.m2Hours), frac) });
+      out.push({ ms: arrMs, distNm: distSoFarNm });
     }
     return out;
   }
-  function clearWaypointAnnotations() {
-    markers.forEach(function (m) { m.unbindTooltip(); });
+  // Step-through waypoint preview (2026-07-25, replaces the old permanent
+  // per-waypoint Leaflet tooltips shown on every marker at once --
+  // user: "the display of times and water level is too cluttered, let's
+  // build a Google-maps-like preview mode where I can step through the
+  // waypoints and see the distance traveled, the arrival time. Remove
+  // depth information"). All three optimizer sub-modes feed the same
+  // lastPreviewArrivals array (from waypointArrivals(), see above) and the
+  // same rendering here -- only WHICH departure instant produced that array
+  // differs per sub-mode.
+  var previewIndex = 0;
+  var lastPreviewArrivals = null;
+  function updatePreviewPanel() {
+    var panel = document.getElementById('route-preview');
+    if (!lastPreviewArrivals || lastPreviewArrivals.length < 2) {
+      panel.style.display = 'none';
+      return;
+    }
+    panel.style.display = '';
+    if (previewIndex >= lastPreviewArrivals.length) previewIndex = lastPreviewArrivals.length - 1;
+    if (previewIndex < 0) previewIndex = 0;
+    var pt = lastPreviewArrivals[previewIndex];
+    document.getElementById('preview-prev').disabled = previewIndex === 0;
+    document.getElementById('preview-next').disabled = previewIndex === lastPreviewArrivals.length - 1;
+    document.getElementById('route-preview-label').textContent =
+      'Waypoint ' + (previewIndex + 1) + ' of ' + lastPreviewArrivals.length;
+    var lines = [
+      'Distance so far: ' + pt.distNm.toFixed(2) + ' nm',
+      'Arrival: ' + fmtTime(pt.ms)
+    ];
+    // Arrival-mode-only (user: "show the time required to reach the
+    // endpoint ... so the user can see if he is late and won't make it") --
+    // this app has no live position feed, so this is "time left per the
+    // CURRENT plan" (endpoint arrival minus this waypoint's own planned
+    // arrival), not a live delay/lateness tracker -- the user compares it
+    // against their own real progress by eye.
+    if (optimizerSubMode === 'arrival') {
+      var lastPt = lastPreviewArrivals[lastPreviewArrivals.length - 1];
+      var remainH = (lastPt.ms - pt.ms) / 3600000;
+      lines.push(remainH <= 0 ? 'At destination' : fmtDurationHM(remainH) + ' to destination');
+    }
+    document.getElementById('route-preview-info').innerHTML =
+      lines.map(function (l) { return '<div>' + l + '</div>'; }).join('');
   }
-  // Signature changed 2026-07-25: takes the three CANDIDATE objects
-  // themselves (each already carrying its own .departureMs/.refHwMs/.frac,
-  // see runOptimizer's per-candidate real-anchor fix) instead of raw ms +
-  // one shared refHwMs/frac -- early/late/pick can each be a genuinely
-  // different real HW event now (different real stations' events even, in
-  // principle), where before they were forced to share one anchor.
-  function applyWaypointAnnotations(earlyC, lateC, pickC, stwKn) {
-    if (markers.length !== waypoints.length) return; // mid-drag/rebuild race guard
-    var early = waypointArrivals(earlyC.departureMs, stwKn, earlyC.refHwMs, earlyC.frac);
-    var late = waypointArrivals(lateC.departureMs, stwKn, lateC.refHwMs, lateC.frac);
-    var pick = waypointArrivals(pickC.departureMs, stwKn, pickC.refHwMs, pickC.frac);
-    markers.forEach(function (m, i) {
-      var loMs = Math.min(early[i].ms, late[i].ms), hiMs = Math.max(early[i].ms, late[i].ms);
-      // Not depth-constrained (the window collapses to a single instant,
-      // see applyWaypointAnnotations' own callers) -- show the elapsed time
-      // since departure alongside the absolute time (2026-07-23, user
-      // request: "add the time and time difference, e.g. 22. Jul 01:45
-      // +12"), reusing the same fmtOffset() the departure callout already
-      // uses elsewhere, for a consistent "+XhYYm" style throughout the app.
-      // A genuine earliest-latest bracket (the depth-constrained case)
-      // already conveys its own range, so no elapsed offset is added there.
-      var windowText = hiMs - loMs > 60000
-        ? (fmtTime(loMs) + ' – ' + fmtTime(hiMs))
-        : (fmtTime(pick[i].ms) + ' (' + fmtOffset(Math.round((pick[i].ms - pickC.departureMs) / 60000)) + ')');
-      var depthText = pick[i].depth === null ? 'no data' : pick[i].depth.toFixed(2) + ' m';
-      m.bindTooltip(
-        '<div class="wp-time-tt"><div>' + windowText + '</div><div>' + depthText + '</div></div>',
-        { permanent: true, direction: 'right', offset: [14, 0] }
-      ).openTooltip();
-    });
-  }
+  document.getElementById('preview-prev').addEventListener('click', function () {
+    previewIndex--; updatePreviewPanel();
+  });
+  document.getElementById('preview-next').addEventListener('click', function () {
+    previewIndex++; updatePreviewPanel();
+  });
 
   function runOptimizer() {
     if (!grid || !depthGrid || waypoints.length < 2) {
@@ -3533,7 +3772,8 @@
       document.getElementById('prev-departure-btn').disabled = true;
       clearRouteOverlays();
       setConstraintMarker(null);
-      clearWaypointAnnotations();
+      lastPreviewArrivals = null;
+      updatePreviewPanel();
       lastRoutePts = [];
       return;
     }
@@ -3657,15 +3897,6 @@
     // and the marker/badge severity differ.
     var everDries = candidates.some(function (c) { return c.worstDepth !== null && c.worstDepth <= 0; });
 
-    // Result rendering, restructured into a small label/value table
-    // 2026-07-22 (user: "the route information is now a lot of text ...
-    // make it more tabular") -- same underlying pick/window logic and
-    // wording as before, just laid out as rows instead of \n-joined
-    // sentences. `row()` builds one <tr>, skipped entirely when value is
-    // null/undefined so optional rows don't leave an empty cell.
-    function row(label, value) {
-      return value == null ? '' : '<tr><td>' + label + '</td><td>' + value + '</td></tr>';
-    }
     var resultHtml, pick = null;
     if (allFeasible) {
       var pickPool = futureOnly(candidates);
@@ -3677,9 +3908,15 @@
       lastPick = pick; // icon-tile grid's own passage/thru-water (updateStatsTiles)
       var slowest = pickPool.reduce(function (a, b) { return b.distThroughWaterNm > a.distThroughWaterNm ? b : a; });
       var minMargin = pickPool.reduce(function (a, b) { return b.worstClearance < a.worstClearance ? b : a; }).worstClearance;
+      // The bracketed passage-time duration this row used to also show
+      // (e.g. "3.45 nm (0.75 h)") was dropped 2026-07-25 (user: "what does
+      // the time information in parenthesis mean? if redundant, remove
+      // it") -- it's directly implied by distance-through-water at this
+      // boat's own fixed STW, and wasn't adding information the nm figure
+      // didn't already carry.
       var slowerRow = slowest.distThroughWaterNm - pick.distThroughWaterNm > 0.01
         ? row('Longest distance through water in window', fmtOffset(slowest.offsetMin) + ' — ' +
-            slowest.distThroughWaterNm.toFixed(2) + ' nm (' + slowest.totalH.toFixed(2) + ' h)')
+            slowest.distThroughWaterNm.toFixed(2) + ' nm')
         : row('Current effect', 'negligible — any departure in this window is about the same');
       // LED (2026-07-25): every departure in the search window clears, but
       // still amber (not green) if the margin dips below 0.5 m anywhere --
@@ -3696,14 +3933,8 @@
         slowerRow +
         '</table>';
       setConstraintMarker(null);
-      // Not depth-constrained -- there's no real "safe window" to bracket,
-      // every departure clears easily, so showing a broad earliest-latest
-      // range (the old behavior: the whole ±window span) was misleading,
-      // not informative. Collapse to a single instant per waypoint -- "when
-      // would I reach this point," for the one optimum departure -- by
-      // passing the SAME candidate as both the early and late bound
-      // (2026-07-23, user request).
-      applyWaypointAnnotations(pick, pick, pick, stwKn);
+      lastPreviewArrivals = waypointArrivals(pick.departureMs, stwKn, pick.refHwMs, pick.frac);
+      updatePreviewPanel();
     } else if (windows.length) {
       windows.forEach(function (w) {
         var slice = candidates.slice(w.start, w.end + 1);
@@ -3754,11 +3985,8 @@
         row('Margin at tightest point', pick.worstClearance.toFixed(2) + ' m') +
         row(windowWord, fmtOffset(candidates[bestWindow.start].offsetMin) + ' to ' + fmtOffset(candidates[bestWindow.end].offsetMin)) +
         '</table>';
-      // Bracket from the window's own future-restricted pool, not its raw
-      // start/end indices -- if this window opened before "now" and is
-      // still ongoing, the earliest ACTIONABLE departure is the first
-      // future one, not the window's literal (already-past) opening.
-      applyWaypointAnnotations(bestWindow.pool[0], bestWindow.pool[bestWindow.pool.length - 1], pick, stwKn);
+      lastPreviewArrivals = waypointArrivals(pick.departureMs, stwKn, pick.refHwMs, pick.frac);
+      updatePreviewPanel();
       // Mark the point that actually EXPLAINS the label, not just the
       // recommended pick's own tightest point -- `pick` is drawn from a
       // *feasible* window by construction (worstClearance >= 0), so its
@@ -3790,7 +4018,8 @@
         resultHtml = 'No depth data available along this route — cannot assess feasibility.';
         document.getElementById('depth-led').innerHTML = '';
         setConstraintMarker(null);
-        clearWaypointAnnotations();
+        lastPreviewArrivals = null;
+        updatePreviewPanel();
       } else {
         pick = futureOnly(candidates).reduce(function (a, b) { return b.reachedNm > a.reachedNm ? b : a; });
         document.getElementById('depth-led').innerHTML =
@@ -3815,10 +4044,10 @@
         setConstraintMarker(pick.blockPoint, 'Blocked here',
           pick.blockPoint ? 'Short by ' + Math.abs(pick.blockPoint.clearance).toFixed(2) + ' m at ' + fmtTime(pick.blockPoint.ms) : null);
         // No safe schedule to show per waypoint here -- every departure in
-        // the window fails somewhere, so labeling waypoints with an
-        // "earliest-latest" window would misleadingly imply a safe one
-        // exists.
-        clearWaypointAnnotations();
+        // the window fails somewhere, so a step-through preview would
+        // misleadingly imply a safe one exists.
+        lastPreviewArrivals = null;
+        updatePreviewPanel();
       }
     }
 
@@ -3839,6 +4068,118 @@
       lastRefHwMs = pick.refHwMs;
       drawRouteForDeparture(pick.departureMs, pick.frac, required, stwKn);
     }
+  }
+
+  // Optimizer sub-modes 'departure'/'arrival' (2026-07-25, user request) --
+  // unlike 'auto's ±12.5h sweep, each of these resolves to exactly ONE
+  // departure instant (manually picked, or back-solved from a manually
+  // picked arrival), so there's no window/candidates concept -- just one
+  // simulateRoute() result to report and project.
+  function clearManualResult() {
+    document.getElementById('result').innerHTML = '';
+    document.getElementById('depth-led').innerHTML = '';
+    lastPick = null;
+    lastPreviewArrivals = null;
+    updatePreviewPanel();
+    clearRouteOverlays();
+    setConstraintMarker(null);
+    lastRoutePts = [];
+  }
+  // Shared rendering for both sub-modes -- both boil down to "here's one
+  // resolved departure, show its own feasibility/margin and project the
+  // route," differing only in the callout's label and an optional extra
+  // row (arrival mode's own target-arrival readout). Mirrors the LED/
+  // table wording runOptimizer()'s own allFeasible/infeasible branches
+  // already use, just collapsed to one candidate instead of a window.
+  function renderManualResult(r, stwKn, required, depLabel, extraRowHtml) {
+    lastRefHwMs = r.refHwMs;
+    var offsetMin = Math.round((r.departureMs - r.refHwMs) / 60000);
+    if (r.unknown) {
+      document.getElementById('result').innerHTML = 'No depth data available along this route — cannot assess feasibility.';
+      document.getElementById('depth-led').innerHTML = '';
+      setConstraintMarker(null);
+      lastPick = null;
+      lastPreviewArrivals = null;
+      updatePreviewPanel();
+      return;
+    }
+    lastPick = r;
+    var resultHtml;
+    if (r.feasible) {
+      document.getElementById('depth-led').innerHTML = r.worstClearance < 0.5
+        ? depthLedHtml('amber', 'Feasible, but margin drops below 0.5 m at times')
+        : depthLedHtml('green', 'Clears the whole route with a comfortable margin');
+      resultHtml = depCallout(r.departureMs, offsetMin, false, depLabel) +
+        '<table>' + (extraRowHtml || '') +
+        row('Margin at tightest point', r.worstClearance.toFixed(2) + ' m') +
+        '</table>';
+      setConstraintMarker(null);
+    } else {
+      document.getElementById('depth-led').innerHTML =
+        depthLedHtml('red', 'This departure does not clear the whole route');
+      var wpText = r.blockPoint ? ' (near waypoint ' + r.blockPoint.wpFrom + '–' + r.blockPoint.wpTo + ')' : '';
+      resultHtml = depCallout(r.departureMs, offsetMin, true, depLabel) +
+        '<table>' + (extraRowHtml || '') +
+        row('Reached', r.reachedNm.toFixed(2) + ' of ' + r.totalNm.toFixed(2) + ' nm' + wpText);
+      if (r.blockPoint) {
+        resultHtml += row('Short by', Math.abs(r.blockPoint.clearance).toFixed(2) + ' m at ' + fmtTime(r.blockPoint.ms));
+      }
+      resultHtml += '</table>';
+      setConstraintMarker(r.blockPoint, 'Blocked here',
+        r.blockPoint ? 'Short by ' + Math.abs(r.blockPoint.clearance).toFixed(2) + ' m at ' + fmtTime(r.blockPoint.ms) : null);
+    }
+    document.getElementById('result').innerHTML = resultHtml;
+    drawRouteForDeparture(r.departureMs, r.frac, required, stwKn);
+    lastPreviewArrivals = waypointArrivals(r.departureMs, stwKn, r.refHwMs, r.frac);
+    updatePreviewPanel();
+  }
+  // Sub-mode 'departure': "I need a certain water depth in the departure
+  // harbour to leave" -- project the route from manualDepartureMs exactly
+  // as picked (via the reused #time-box stepper), no search involved.
+  function runManualDeparture() {
+    if (!grid || !depthGrid || waypoints.length < 2) { clearManualResult(); return; }
+    var stwKn = parseFloat(document.getElementById('stw').value) || 5;
+    var draft = parseFloat(document.getElementById('draft').value) || 0;
+    var margin = parseFloat(document.getElementById('margin').value) || 0;
+    var required = draft + margin;
+    var departureMs = manualDepartureMs;
+    var refHwMs = nearestRealHwMs(departureMs), frac = realFracAt(departureMs);
+    var r = simulateRoute(departureMs, stwKn, refHwMs, frac, required);
+    r.departureMs = departureMs; r.refHwMs = refHwMs; r.frac = frac;
+    r.distThroughWaterNm = stwKn * r.totalH;
+    renderManualResult(r, stwKn, required, 'Departure', '');
+  }
+  // Sub-mode 'arrival': "I have to arrive at a certain harbour at high
+  // tide" -- back-solve a departure instant that makes the route's LAST
+  // waypoint arrive at manualArrivalMs. Fixed-point iteration: current's
+  // effect on total transit time is small and smooth across an M2 cycle,
+  // so correcting the departure guess by the full residual each time
+  // converges in a handful of steps (verified: within ~1 minute after 2-3
+  // iterations for routes tested during this feature's own verification).
+  function solveDepartureForArrival(targetArrivalMs, stwKn, required) {
+    var depGuess = targetArrivalMs - simulateRoute(targetArrivalMs, stwKn,
+      nearestRealHwMs(targetArrivalMs), realFracAt(targetArrivalMs), required).totalH * 3600000;
+    var sim, refHw, frac;
+    for (var i = 0; i < 5; i++) {
+      refHw = nearestRealHwMs(depGuess); frac = realFracAt(depGuess);
+      sim = simulateRoute(depGuess, stwKn, refHw, frac, required);
+      var errMs = targetArrivalMs - (depGuess + sim.totalH * 3600000);
+      depGuess += errMs;
+      if (Math.abs(errMs) < 30000) break;
+    }
+    sim.departureMs = depGuess; sim.refHwMs = refHw; sim.frac = frac;
+    sim.distThroughWaterNm = stwKn * sim.totalH;
+    return sim;
+  }
+  function runManualArrival() {
+    if (!grid || !depthGrid || waypoints.length < 2) { clearManualResult(); return; }
+    var stwKn = parseFloat(document.getElementById('stw').value) || 5;
+    var draft = parseFloat(document.getElementById('draft').value) || 0;
+    var margin = parseFloat(document.getElementById('margin').value) || 0;
+    var required = draft + margin;
+    var r = solveDepartureForArrival(manualArrivalMs, stwKn, required);
+    var extraRow = row('Target arrival', fmtTime(manualArrivalMs));
+    renderManualResult(r, stwKn, required, 'Depart (to arrive on time)', extraRow);
   }
 
   function sogLabelIcon(sogKn, faster) {
@@ -3911,11 +4252,12 @@
     // display in Optimizer mode, so it's no longer Live-mode-only
     // scaffolding to hide away.
     if (mode === 'live') {
-      clearWaypointAnnotations();
       document.getElementById('result').innerHTML = '';
       document.getElementById('depth-led').innerHTML = '';
       lastOptimizerCandidates = null;
       lastPick = null;
+      lastPreviewArrivals = null;
+      updatePreviewPanel();
     }
     renderPanel();
   }
