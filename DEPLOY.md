@@ -26,9 +26,11 @@ GitHub account** — if you already have either, skip the matching steps.
 ## 2. Create a Cloudflare account and an R2 bucket
 
 1. Sign up at [dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up).
-2. In the dashboard: **R2 Object Storage** → **Create bucket** → name it
-   e.g. `tidal-router-data`. R2's free tier (10 GB storage, no egress fees)
-   comfortably covers this app's ~500 MB of oversized files.
+2. In the dashboard: **R2 Object Storage** → **Create bucket** → give it
+   any name (below, `<bucket>` stands for whatever you actually named
+   it — e.g. if you called it `tidal-planner-data`, substitute that
+   everywhere `<bucket>` appears). R2's free tier (10 GB storage, no
+   egress fees) comfortably covers this app's ~500 MB of oversized files.
 3. Install `wrangler` (Cloudflare's CLI) if you haven't already:
    ```
    npm install -g wrangler
@@ -37,20 +39,27 @@ GitHub account** — if you already have either, skip the matching steps.
    (opens a browser to authorize wrangler against the account you just made)
 4. Upload the 6 files this repo's `.gitignore` deliberately excludes (they
    live locally in this same directory, just not in git — see the
-   `.gitignore` comment for why):
+   `.gitignore` comment for why). **Replace `<bucket>` with your actual
+   bucket name in all 6 lines**:
    ```
-   wrangler r2 object put tidal-router-data/current_grid_de.bin --file=current_grid_de.bin
-   wrangler r2 object put tidal-router-data/current_grid.bin --file=current_grid.bin
-   wrangler r2 object put tidal-router-data/water_level_grid_de.bin --file=water_level_grid_de.bin
-   wrangler r2 object put tidal-router-data/water_level_grid.bin --file=water_level_grid.bin
-   wrangler r2 object put tidal-router-data/enc_soundg_native_t17.js --file=enc_soundg_native_t17.js
-   wrangler r2 object put tidal-router-data/enc_features_t17.js --file=enc_features_t17.js
+   wrangler r2 object put <bucket>/current_grid_de.bin --file=current_grid_de.bin
+   wrangler r2 object put <bucket>/current_grid.bin --file=current_grid.bin
+   wrangler r2 object put <bucket>/water_level_grid_de.bin --file=water_level_grid_de.bin
+   wrangler r2 object put <bucket>/water_level_grid.bin --file=water_level_grid.bin
+   wrangler r2 object put <bucket>/enc_soundg_native_t17.js --file=enc_soundg_native_t17.js
+   wrangler r2 object put <bucket>/enc_features_t17.js --file=enc_features_t17.js
    ```
-   (Re-run whichever of these after re-running the matching Python
+   Verify each one actually landed before moving on:
+   ```
+   wrangler r2 object get <bucket>/current_grid_de.bin --file=/dev/null
+   ```
+   (or check the bucket's contents in the dashboard: R2 → your bucket →
+   should list all 6 objects with real byte sizes, not 0).
+   Re-run whichever of these after re-running the matching Python
    extraction script locally, to refresh R2 with new data — same "re-run
    to refresh" pattern this project already uses for every other data
    source, just uploading afterward instead of just overwriting a local
-   file.)
+   file.
 
 ## 3. Connect this GitHub repo to Cloudflare Pages
 
@@ -68,7 +77,7 @@ GitHub account** — if you already have either, skip the matching steps.
    bucket bindings** → **Add binding**.
 2. **Variable name**: `TIDAL_DATA` (must match exactly — this is the name
    `functions/_middleware.js` reads via `env.TIDAL_DATA`).
-3. **R2 bucket**: the `tidal-router-data` bucket from step 2.
+3. **R2 bucket**: the `<bucket>` (your actual bucket name) from step 2.
 4. Save, then trigger a redeploy (Pages → Deployments → Retry deployment)
    so the new binding takes effect.
 
