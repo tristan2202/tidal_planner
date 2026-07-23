@@ -1,0 +1,21 @@
+# Python bytecode cache -- regenerable, not source.
+__pycache__/
+*.pyc
+
+# Dev-only scratch screenshots and extraction logs -- not app source,
+# regenerable/reproducible, not meant to be part of the deployed site.
+screenshot_*.png
+shallow_dots_*.png
+extract_log.txt
+
+# Oversized data files (over Cloudflare Pages' 25 MiB per-file limit) --
+# these are hosted in Cloudflare R2 instead and served by
+# functions/_middleware.js, NOT committed to this repo. Re-generate them
+# locally with extract_grids.py/extract_grids_de.py --geojson-only (see
+# each script's own docstring), then upload to R2 -- see DEPLOY.md.
+current_grid_de.bin
+current_grid.bin
+water_level_grid_de.bin
+water_level_grid.bin
+enc_soundg_native_t17.js
+enc_features_t17.js

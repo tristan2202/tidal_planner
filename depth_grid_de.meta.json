@@ -1,0 +1,1 @@
+{"lat0": 53.210910064605905, "dlat": 0.0008871540099363529, "nlat": 2200, "lon0": 6.071312997209579, "dlon": 0.0008871540099359976, "nlon": 3710, "factor": 5, "scale": 100, "noData": -32768, "arrays": ["bedElevation"], "bin": "depth_grid_de.bin"}

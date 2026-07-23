@@ -1,0 +1,1 @@
+{"lat0": 52.87434953260663, "dlat": 0.004435770049681764, "nlat": 238, "lon0": 4.192445685217848, "dlon": 0.004435770049680876, "nlon": 708, "refHwIso": "2022-01-01T06:20:00", "m2Hours": 12.4206, "nBins": 72, "neapRangeM": 1.713, "springRangeM": 2.156, "scale": 1000, "noData": -32768, "arrays": ["wlNeap", "wlSpring"], "bin": "water_level_grid.bin"}

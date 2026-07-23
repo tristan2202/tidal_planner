@@ -1,0 +1,1 @@
+{"lat0": 53.210910064605905, "dlat": 0.004435770049681764, "nlat": 440, "lon0": 6.071312997209579, "dlon": 0.004435770049679988, "nlon": 742, "refHwIso": "2022-01-01T10:20:00", "m2Hours": 12.4206, "nBins": 72, "neapRangeM": 3.617, "springRangeM": 4.501, "scale": 1000, "noData": -32768, "arrays": ["uNeap", "vNeap", "uSpring", "vSpring"], "bin": "current_grid_de.bin"}
