@@ -823,11 +823,34 @@
   // excluding "same-type" consecutive pairs (two HWs or two LWs in a row,
   // meaning a real event was dropped -- see nearestGenuineBracket's own
   // comment below for why those can't be trusted as a real range).
+  // Drops spurious near-duplicate HW entries (2026-07-26, found while
+  // fixing the cycle-step bug below): the real extracted prediction data
+  // for at least one station (Den Oever) turned out to contain genuine
+  // ~11-12.5h real HW-to-HW gaps interspersed with clusters of extra "HW"
+  // entries only 0.3-1.2h apart -- almost certainly the extraction
+  // script's peak-detection picking up small numerical wiggles near a
+  // real high water as separate additional peaks, not real distinct
+  // tides (true semidiurnal HW-to-HW spacing is always close to 12.4h,
+  // never under ~6h). Left unfiltered, stepPlanCycle() (which walks this
+  // list one real event at a time) would often land on one of these
+  // near-duplicates instead of the next genuine high water -- collapsing
+  // each tight cluster down to its first entry fixes that at the source,
+  // for every caller of hwEvents, not just the cycle-stepper.
+  function _dedupeCloseHwEvents(hwEvents) {
+    var MIN_GAP_MS = 6 * 3600000;
+    if (!hwEvents.length) return hwEvents;
+    var out = [hwEvents[0]];
+    for (var i = 1; i < hwEvents.length; i++) {
+      if (hwEvents[i][0] - out[out.length - 1][0] < MIN_GAP_MS) continue;
+      out.push(hwEvents[i]);
+    }
+    return out;
+  }
   function tideIndexFor(h) {
     if (!h) return { events: [], hwEvents: [], rangeCm: { min: 100, max: 200 } };
     if (h._tideIndex) return h._tideIndex;
     var events = tideEventsFor(h);
-    var hwEvents = events.filter(function (e) { return e[1] === 'HW'; });
+    var hwEvents = _dedupeCloseHwEvents(events.filter(function (e) { return e[1] === 'HW'; }));
     var ranges = [];
     for (var i = 1; i < events.length; i++) {
       if (events[i][1] === events[i - 1][1]) continue;
@@ -870,22 +893,28 @@
       anchorIndex = tideIndexFor(anchorStation);
     }
   }
-  // Nearest real HW instant (for the CURRENT anchor station) to an
+  // Nearest real HW EVENT INDEX (for the CURRENT anchor station) to an
   // arbitrary ms -- binary search since hwEvents is sorted by ms (only a
   // few hundred/thousand entries, but a linear scan would still be
   // wasteful called on every mousemove/slider tick via the callers below).
-  function nearestRealHwMs(ms) {
+  // Factored out from nearestRealHwMs() 2026-07-26 so stepPlanCycle() can
+  // step by real EVENT INDEX (see its own comment for why that matters).
+  function nearestRealHwIndex(ms) {
     var hwEvents = anchorIndex.hwEvents;
-    if (!hwEvents.length) return ms;
     var lo = 0, hi = hwEvents.length - 1;
     while (lo < hi) {
       var mid = (lo + hi) >> 1;
       if (hwEvents[mid][0] < ms) lo = mid + 1; else hi = mid;
     }
     var cand = [lo - 1, lo, lo + 1].filter(function (i) { return i >= 0 && i < hwEvents.length; });
-    var best = cand.reduce(function (a, b) {
+    return cand.reduce(function (a, b) {
       return Math.abs(hwEvents[b][0] - ms) < Math.abs(hwEvents[a][0] - ms) ? b : a;
     });
+  }
+  function nearestRealHwMs(ms) {
+    var hwEvents = anchorIndex.hwEvents;
+    if (!hwEvents.length) return ms;
+    var best = nearestRealHwIndex(ms);
     return hwEvents[best][0];
   }
   // Nearest bracket index `i` (using events[i-1]/[i], for the CURRENT
@@ -3415,13 +3444,40 @@
   // which tried to find "the next FEASIBLE departure" and needed
   // progressively more machinery to actually do that reliably (it crawled
   // 10 min at a time for a depth-constrained window at first, then needed
-  // a whole roll-forward fallback for the unconstrained case). Unconditional
-  // cycle-stepping is simpler and fully predictable: always moves exactly
-  // one real M2 period (grid.m2Hours) forward or back and shows whatever
-  // result that new search window has -- feasible or not -- the same as
-  // manually retyping the plan-date picker one cycle later/earlier.
+  // a whole roll-forward fallback for the unconstrained case).
+  //
+  // Steps by real HW EVENT INDEX, not a fixed grid.m2Hours offset
+  // (2026-07-26, real bug -- user report: "sometimes it jumps only 10
+  // minutes, sometimes 24 hours on a non-constrained route," expecting a
+  // consistent ~one-cycle repeat). Root cause, confirmed by direct
+  // measurement: grid.m2Hours is an IDEALIZED constant (~12.4206h), but
+  // real published high-water events at the anchor station aren't spaced
+  // by exactly that amount (genuine real-world cycle-to-cycle variation).
+  // Repeatedly adding the idealized constant drifts away from the real
+  // event timeline -- a diagnostic run showed the offset between
+  // plannedDepartureMs and its own nearestRealHwMs() oscillating between
+  // roughly +/-5.5h from the very first click, i.e. right at the boundary
+  // where nearestRealHwMs() could snap to either neighboring real event --
+  // so which real event actually anchors the search window becomes
+  // essentially unpredictable after just one or two clicks, and the
+  // recommended departure (always at roughly the same PHASE relative to
+  // WHICHEVER event anchors the window) jumps by however far apart those
+  // two candidate real events happen to be. Stepping along the SAME real
+  // hwEvents list the search itself anchors to (previous/next index, not
+  // previous/next idealized-constant instant) keeps the two in lockstep
+  // by construction -- there is no second, independent clock left to
+  // drift out of sync with the first.
   function stepPlanCycle(sign) {
-    plannedDepartureMs += sign * grid.m2Hours * 3600000;
+    var hwEvents = anchorIndex.hwEvents;
+    if (hwEvents.length) {
+      var idx = nearestRealHwIndex(plannedDepartureMs) + sign;
+      idx = Math.max(0, Math.min(hwEvents.length - 1, idx));
+      plannedDepartureMs = hwEvents[idx][0];
+    } else {
+      // No real event data at all for this anchor station -- fall back to
+      // the idealized constant (better than not moving at all).
+      plannedDepartureMs += sign * grid.m2Hours * 3600000;
+    }
     document.getElementById('plan-date').value = fmtDatetimeLocal(plannedDepartureMs);
     updatePlanDateFmt();
     renderPanel();
@@ -3914,7 +3970,27 @@
     // literally nothing in the search window is still in the future (e.g.
     // the user picked a planning date well in the past on purpose) --
     // there's no meaningful "future" answer to give there.
-    var nowMs = Date.now();
+    //
+    // Anchored on min(real now, plannedDepartureMs), not bare Date.now()
+    // (2026-07-26, user report: stepping "Previous/Next cycle" on a non-
+    // depth-constrained route sometimes jumped the recommended departure
+    // by as little as 10 min or as much as 24h, instead of the expected
+    // ~one M2 cycle each time). Root cause: the ±12.5h search window
+    // shifts by exactly one cycle per step, but it used to get filtered
+    // against a FIXED real "now" regardless -- as cycle-stepping moved the
+    // window's relationship to that fixed point, a different, non-
+    // periodic fraction of the window got excluded each click, so the
+    // argmin could snap to a completely different candidate even though
+    // the underlying current pattern is genuinely periodic. Using
+    // whichever of real-now/plannedDepartureMs is EARLIER keeps the filter
+    // anchored to a single fixed point for an entire run of forward
+    // clicks (real now, since it's earlier) or backward clicks
+    // (plannedDepartureMs itself, which moves WITH the window each time,
+    // excluding the same relative portion every step) -- restoring the
+    // periodic behavior the tidal model actually has, while still never
+    // recommending a literally-past departure when planning close to the
+    // present (the two values are equal there, same behavior as before).
+    var nowMs = Math.min(Date.now(), plannedDepartureMs);
     function isFuture(c) { return c.departureMs >= nowMs; }
     function futureOnly(list) {
       var f = list.filter(isFuture);
@@ -4578,7 +4654,16 @@
     waypoints: waypoints, markers: markers, render: render,
     runOptimizer: runOptimizer, drawRouteSnapshot: drawRouteSnapshot,
     chartedDepthAt: chartedDepthAt, actualDepthAt: actualDepthAt,
-    waterLevelAt: waterLevelAt, nearestStations: nearestStations
+    waterLevelAt: waterLevelAt, nearestStations: nearestStations,
+    // Getters, not raw values (2026-07-26) -- lastPick/plannedDepartureMs
+    // are primitives reassigned by runOptimizer()/stepPlanCycle() well
+    // after this object is built once; a plain value here would go stale
+    // immediately, the same staleness pitfall already hit once this
+    // session with a reassigned array (see Claude.md).
+    getLastPick: function () { return lastPick; },
+    getPlannedDepartureMs: function () { return plannedDepartureMs; },
+    nearestRealHwMs: nearestRealHwMs,
+    getAnchorStationName: function () { return anchorStation.name; }
   };
   } // end startApp
 
