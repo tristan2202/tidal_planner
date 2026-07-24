@@ -71,7 +71,6 @@
   }
   #time-box-controls button:hover { background: #e8edf1; }
   #time-box-controls #time-goto-now { flex: 1.3; font-size: 12px; }
-  .boat-icon { text-align: center; }
 
   /* Tidal-curve panel, 2026-07-25 (user: "This should be a separate
      checkbox ('Tidal Curves') ... needs a dropdown with all available
@@ -133,14 +132,23 @@
      of very different label lengths made the row's wrapped height jump
      between modes; one button showing the CURRENT mode, toggling on click,
      has nothing to visually jump). */
-  #mode-row { display: flex; gap: 4px; margin-top: 8px; flex: none; }
-  .mode-btn {
-    flex: 1; padding: 4px 4px; font-size: 11px; border: 1px solid #16324a;
-    background: #fff; color: #16324a; border-radius: 4px; cursor: pointer;
+  /* Pill switch (2026-07-25, replaces the single toggle button -- user
+     request: "make the toggle between map time and calculated a pill
+     switch") -- two explicit segments (clicking either sets that mode
+     directly, rather than toggling) inside one rounded track, the active
+     segment filled in solid. */
+  #mode-row { margin-top: 8px; flex: none; }
+  #mode-pill {
+    display: flex; background: #e3e8eb; border-radius: 999px; padding: 2px; gap: 2px;
   }
-  .mode-btn:hover { background: #e8edf1; }
-  .mode-btn.active { background: #16324a; color: #fff; }
-  .mode-btn.active:hover { background: #204a70; }
+  .mode-pill-seg {
+    flex: 1; padding: 5px 8px; font-size: 11px; font-weight: 600; border: none;
+    background: transparent; color: #16324a; border-radius: 999px; cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .mode-pill-seg:hover:not(.active) { background: rgba(22,50,74,0.1); }
+  .mode-pill-seg.active { background: #16324a; color: #fff; }
+  .mode-pill-seg.active:hover { background: #204a70; }
   /* Depth color-mode toggle (Safety/Depth) REMOVED 2026-07-25 -- user's own
      call, "only use the safety mode" -- #color-mode-legend now just shows
      the Safety mode's fixed legend text as a static label, not a
@@ -202,6 +210,21 @@
      stepper instead (see updateTimeBoxVisibility()'s own comment). */
   #optimizer-mode-row { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; }
   #optimizer-mode-row label { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #333; cursor: pointer; }
+  /* Color coding (2026-07-25, user request) -- ties each strategy to a
+     color, echoed in the Map Time widget's own heading (see
+     updateTimeBoxVisibility()) so it's visually obvious which control is
+     "in charge" of the currently active mode. Colors chosen for OPTIMIZER_
+     MODE_COLORS in JS are the single source of truth; these dot swatches
+     and the JS-set #time-box-label color must stay in sync with it. */
+  .opt-mode-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+  .opt-mode-dot-auto { background: #7cb342; }
+  .opt-mode-dot-departure { background: #1e88e5; }
+  .opt-mode-dot-arrival { background: #00897b; }
+  /* "In time selector window" hint (2026-07-25, user request: make clear
+     the actual time gets picked in the Map Time widget, not here) -- only
+     shown for 'departure'/'arrival' (see updateTimeBoxVisibility()), which
+     is also when this same color reappears as the widget's own heading. */
+  #optimizer-mode-hint { font-size: 11px; font-weight: 600; margin: -2px 0 6px; }
   /* Step-through waypoint preview (2026-07-25, replaces the old permanent
      per-waypoint map tooltips -- see updatePreviewPanel()'s own comment for
      the clutter this fixes). Hidden (via JS display:none) whenever there's
@@ -247,7 +270,7 @@
      result table into its own high-contrast block so it reads at a glance
      instead of competing with the rest of the figures as just another row. */
   #result .dep-callout {
-    display: flex; align-items: baseline; gap: 8px; margin-top: 6px;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-top: 6px;
     padding: 6px 8px; background: #eaf5ec; border: 1px solid #1a7a1a; border-radius: 4px;
   }
   #result .dep-callout.warn { background: #fdecea; border-color: #c0392b; }
@@ -255,6 +278,8 @@
   #result .dep-callout-time { font-size: 17px; font-weight: 800; color: #16324a; font-variant-numeric: tabular-nums; }
   #result .dep-callout.warn .dep-callout-time { color: #a11; }
   #result .dep-callout-offset { font-size: 11px; color: #666; }
+  /* 2026-07-25 -- see depCallout()'s own comment for why this line exists. */
+  #result .dep-callout-hint { flex-basis: 100%; font-size: 10px; color: #888; }
   #result table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
   #result table td { padding: 2px 4px 2px 0; vertical-align: top; }
   #result table td:first-child { color: #444; white-space: nowrap; }
@@ -404,7 +429,10 @@
   <div id="grid-status">Loading grids (NL + Germany, ~450 MB, first load takes ~20-30s)…</div>
   <div class="row"><label>Start from</label><select id="harbour-add" style="flex:1"></select></div>
   <div id="mode-row">
-    <button id="mode-toggle-btn" class="mode-btn active">🕐 Live (map time)</button>
+    <div id="mode-pill">
+      <button id="mode-btn-live" class="mode-pill-seg active">Live Map</button>
+      <button id="mode-btn-optimizer" class="mode-pill-seg">Route Optimizer</button>
+    </div>
   </div>
   <div id="color-mode-legend">Green = clears required depth, orange = within 0.3 m, red = short.</div>
   <div id="depth-range-info"></div>
@@ -412,10 +440,11 @@
   <div id="coverage-warning"></div>
   <div id="dep-search">
     <div id="optimizer-mode-row">
-      <label><input type="radio" name="opt-mode" value="auto" checked> Optimum (fastest)</label>
-      <label><input type="radio" name="opt-mode" value="departure"> Pick departure time</label>
-      <label><input type="radio" name="opt-mode" value="arrival"> Pick arrival time</label>
+      <label><input type="radio" name="opt-mode" value="auto" checked><span class="opt-mode-dot opt-mode-dot-auto"></span>Optimum (fastest)</label>
+      <label><input type="radio" name="opt-mode" value="departure"><span class="opt-mode-dot opt-mode-dot-departure"></span>Pick departure time</label>
+      <label><input type="radio" name="opt-mode" value="arrival"><span class="opt-mode-dot opt-mode-dot-arrival"></span>Pick arrival time</label>
     </div>
+    <div id="optimizer-mode-hint"></div>
     <div id="depth-led"></div>
     <div id="result"></div>
     <div id="dep-step-row">
@@ -2487,14 +2516,12 @@
     refreshRefHw();
     redrawDiagCurrent();
     // Mode 1 (Live) redraws the whole route at the new instant -- this is
-    // what makes stepping the Map Time widget actually move the boat/depth
-    // picture along the route, not just the standalone boat marker/hover
-    // curve (2026-07-23). updateBoatMarker() is still called unconditionally
-    // right after: in Mode 1, drawRouteCore() already just removed the boat
-    // marker (no propagated-transit concept to place it with), so this is a
-    // harmless no-op there; in Mode 2 it keeps working exactly as before.
+    // what makes stepping the Map Time widget actually move the depth
+    // picture along the route, not just the hover curve (2026-07-23). The
+    // boat marker this comment used to also mention was removed 2026-07-25
+    // (user: "does not add value anymore" -- the step-through waypoint
+    // preview already shows position/time along the route).
     if (appMode === 'live') drawRouteSnapshot(displayedMs);
-    updateBoatMarker();
     updateTidalCurveWidget();
     // Real bug fix (2026-07-23, user report): the icon-tile stats
     // (computeQuickStats(), anchored to displayedMs in Live mode) never
@@ -2791,15 +2818,23 @@
     this.value = '';
   });
 
-  function numberedIcon(n) {
+  // `highlighted` (2026-07-25) -- used by updatePreviewPanel() to mark
+  // whichever waypoint the step-through preview is currently showing
+  // (user: "when stepping through the waypoints with the arrow buttons,
+  // the map should center on the waypoint and highlight it"). Optional,
+  // defaults falsy -- render()'s own numberedIcon(i) call is unaffected.
+  function numberedIcon(n, highlighted) {
+    var size = highlighted ? 28 : 22;
+    var bg = highlighted ? '#e08a00' : '#16324a';
+    var shadow = highlighted ? '0 0 6px rgba(224,138,0,.9)' : '0 0 3px rgba(0,0,0,.5)';
     return L.divIcon({
       className: 'wp-icon',
-      html: '<div style="background:#16324a;color:#fff;border-radius:50%;width:22px;height:22px;' +
-            'display:flex;align-items:center;justify-content:center;font-size:12px;' +
-            'font-family:system-ui,sans-serif;border:2px solid #fff;box-shadow:0 0 3px rgba(0,0,0,.5)">' +
+      html: '<div style="background:' + bg + ';color:#fff;border-radius:50%;width:' + size + 'px;height:' + size + 'px;' +
+            'display:flex;align-items:center;justify-content:center;font-size:' + (highlighted ? 13 : 12) + 'px;' +
+            'font-family:system-ui,sans-serif;border:2px solid #fff;box-shadow:' + shadow + '">' +
             (n + 1) + '</div>',
-      iconSize: [22, 22],
-      iconAnchor: [11, 11]
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2]
     });
   }
 
@@ -3013,7 +3048,11 @@
     var hasRoute = waypoints.length > 0;
     if (hasRoute && !_lastHadRoute) _onRouteRestarted();
     _lastHadRoute = hasRoute;
-    if (!document.getElementById('tidal-curves-toggle').checked) return;
+    // Shared with updateTimeBoxVisibility()'s own panel-visibility check
+    // (see shouldShowTidalCurve()'s own comment) -- previously this read
+    // the raw checkbox alone, which could disagree with the panel actually
+    // being shown in 'departure'/'arrival' sub-modes.
+    if (!shouldShowTidalCurve()) return;
     var sel = document.getElementById('tidal-curve-station');
     // Auto-default: nearest station to the route's own departure point
     // (arrival point instead, in 'arrival' sub-mode -- 2026-07-25, "select
@@ -3052,28 +3091,61 @@
     tidalCurveStationSet = true;
     updateTidalCurveWidget();
   });
+  // Color coding (2026-07-25, user request) -- single source of truth for
+  // the .opt-mode-dot-* swatches (CSS, kept in sync by hand) and the Map
+  // Time widget's own heading color below.
+  var OPTIMIZER_MODE_COLORS = { auto: '#7cb342', departure: '#1e88e5', arrival: '#00897b' };
+  // Whether the tidal-curve panel should currently be drawing anything --
+  // shared by updateTimeBoxVisibility() (panel show/hide) and
+  // updateTidalCurveWidget() (the actual draw call), which used to each
+  // compute this slightly differently: the panel correctly forced itself
+  // on for 'departure'/'arrival' regardless of the checkbox, but the draw
+  // function still gated on the raw checkbox alone, so those two sub-modes
+  // could show an empty panel with nothing drawn in it if "Tidal Curves"
+  // had never been checked (2026-07-25, found investigating a "tidal
+  // display isn't synchronized" report -- a related but distinct bug from
+  // that report, fixed here regardless since it's a real inconsistency).
+  function shouldShowTidalCurve() {
+    var tidalOn = document.getElementById('tidal-curves-toggle').checked;
+    var manualMode = appMode === 'optimizer' && (optimizerSubMode === 'departure' || optimizerSubMode === 'arrival');
+    return tidalOn || manualMode;
+  }
   // Shows/hides #time-box itself (visible in Live mode regardless, in the
   // 'departure'/'arrival' optimizer sub-modes regardless -- see below --
   // or in Optimizer 'auto' only if Tidal Curves is checked), its step-
   // controls section (Live mode, or 'departure'/'arrival' where it drives
   // manualDepartureMs/manualArrivalMs instead of displayedMs -- see
   // stepSelectedTime()), and the tidal-curve panel. Also relabels the
-  // box's header for whichever instant the stepper is currently editing.
+  // box's header (colored to match the active radio option, see
+  // OPTIMIZER_MODE_COLORS) for whichever instant the stepper is currently
+  // editing, and shows a small hint in 'departure'/'arrival' making clear
+  // the actual time is picked in this widget, not the radio row itself
+  // (user request, 2026-07-25).
   function updateTimeBoxVisibility() {
-    var tidalOn = document.getElementById('tidal-curves-toggle').checked;
     // 'departure'/'arrival' force the curve panel on regardless of the
     // checkbox (2026-07-25) -- the whole point of these sub-modes is
     // looking at the tide before picking a time, so hiding it behind an
     // easy-to-forget checkbox would defeat the feature.
     var manualMode = appMode === 'optimizer' && (optimizerSubMode === 'departure' || optimizerSubMode === 'arrival');
-    var showCurve = tidalOn || manualMode;
+    var showCurve = shouldShowTidalCurve();
     document.getElementById('time-box').style.display = (appMode === 'live' || showCurve) ? '' : 'none';
     document.getElementById('time-box-step-section').style.display = (appMode === 'live' || manualMode) ? '' : 'none';
     document.getElementById('tidal-curve-panel').style.display = showCurve ? '' : 'none';
-    document.getElementById('time-box-label').textContent =
+    var label = document.getElementById('time-box-label');
+    label.textContent =
       appMode === 'live' ? 'Map time' :
       optimizerSubMode === 'departure' ? 'Departure time' :
       optimizerSubMode === 'arrival' ? 'Arrival time' : 'Tidal Curves';
+    label.style.color = appMode === 'optimizer' ? OPTIMIZER_MODE_COLORS[optimizerSubMode] : '';
+    var hint = document.getElementById('optimizer-mode-hint');
+    if (manualMode) {
+      hint.style.display = '';
+      hint.style.color = OPTIMIZER_MODE_COLORS[optimizerSubMode];
+      hint.textContent = 'Pick the ' + (optimizerSubMode === 'departure' ? 'departure' : 'target arrival') +
+        ' time in the time selector window.';
+    } else {
+      hint.style.display = 'none';
+    }
   }
   document.getElementById('tidal-curves-toggle').addEventListener('change', function () {
     updateTimeBoxVisibility();
@@ -3657,11 +3729,18 @@
   // information is the departure time (window) - highlight better") --
   // pulled out of the result table into its own high-contrast block instead
   // of competing with the other figures as just another row.
+  // Offset clarified 2026-07-25 (user asked directly what the parenthetical
+  // number means, and guessed "difference to the last cycle" -- it isn't;
+  // it's minutes from the planning date's own nearest REAL high water at
+  // the route's anchor station, see nearestRealHwMs()/anchorStation). Names
+  // the station and "high water" explicitly instead of a bare "(-3h40m)"
+  // that only makes sense if you already know the convention.
   function depCallout(ms, offsetMin, warn, label) {
     return '<div class="dep-callout' + (warn ? ' warn' : '') + '">' +
       '<div class="dep-callout-label">' + (label || 'Depart') + '</div>' +
       '<div class="dep-callout-time">' + fmtTime(ms) + '</div>' +
       '<div class="dep-callout-offset">(' + fmtOffset(offsetMin) + ')</div>' +
+      '<div class="dep-callout-hint">vs ' + anchorStation.name + ' high water</div>' +
       '</div>';
   }
   // Depth-constraint LED (2026-07-25, replaces the old top status line +
@@ -3721,10 +3800,22 @@
   // differs per sub-mode.
   var previewIndex = 0;
   var lastPreviewArrivals = null;
-  function updatePreviewPanel() {
+  // Resets every marker to its plain numbered icon (2026-07-25) -- used
+  // whenever the preview panel itself isn't showing, so a highlight from
+  // an earlier route doesn't linger after switching back to Live mode or
+  // clearing the route.
+  function _clearPreviewHighlight() {
+    markers.forEach(function (m, i) { m.setIcon(numberedIcon(i, false)); });
+  }
+  // `pan`, true only from the Prev/Next button clicks themselves (2026-07-25,
+  // user request) -- re-centering the map on every renderPanel()-driven call
+  // (route edits, mode switches, ...) would fight a user mid-drag or mid-
+  // pan; only an explicit step through the preview should move the view.
+  function updatePreviewPanel(pan) {
     var panel = document.getElementById('route-preview');
     if (!lastPreviewArrivals || lastPreviewArrivals.length < 2) {
       panel.style.display = 'none';
+      _clearPreviewHighlight();
       return;
     }
     panel.style.display = '';
@@ -3752,12 +3843,19 @@
     }
     document.getElementById('route-preview-info').innerHTML =
       lines.map(function (l) { return '<div>' + l + '</div>'; }).join('');
+    // Highlight the currently-previewed waypoint's own marker (2026-07-25,
+    // user request), matched by index -- lastPreviewArrivals is built
+    // 1:1 with waypoints (see waypointArrivals()).
+    if (markers.length === lastPreviewArrivals.length) {
+      markers.forEach(function (m, i) { m.setIcon(numberedIcon(i, i === previewIndex)); });
+      if (pan) map.panTo([waypoints[previewIndex].lat, waypoints[previewIndex].lon]);
+    }
   }
   document.getElementById('preview-prev').addEventListener('click', function () {
-    previewIndex--; updatePreviewPanel();
+    previewIndex--; updatePreviewPanel(true);
   });
   document.getElementById('preview-next').addEventListener('click', function () {
-    previewIndex++; updatePreviewPanel();
+    previewIndex++; updatePreviewPanel(true);
   });
 
   function runOptimizer() {
@@ -3914,8 +4012,12 @@
       // it") -- it's directly implied by distance-through-water at this
       // boat's own fixed STW, and wasn't adding information the nm figure
       // didn't already carry.
+      // "at +Xh Ym" (2026-07-25, was a bare offset prefix -- user asked what
+      // it meant) -- makes explicit that this is WHEN in the search window
+      // the slowest departure falls (same vs-anchor-station-HW convention
+      // as the callout above), not some other quantity.
       var slowerRow = slowest.distThroughWaterNm - pick.distThroughWaterNm > 0.01
-        ? row('Longest distance through water in window', fmtOffset(slowest.offsetMin) + ' — ' +
+        ? row('Longest distance through water in window', 'at ' + fmtOffset(slowest.offsetMin) + ' — ' +
             slowest.distThroughWaterNm.toFixed(2) + ' nm')
         : row('Current effect', 'negligible — any departure in this window is about the same');
       // LED (2026-07-25): every departure in the search window clears, but
@@ -4093,7 +4195,14 @@
   // already use, just collapsed to one candidate instead of a window.
   function renderManualResult(r, stwKn, required, depLabel, extraRowHtml) {
     lastRefHwMs = r.refHwMs;
-    var offsetMin = Math.round((r.departureMs - r.refHwMs) / 60000);
+    // Offset shown in the callout is relative to the PLANNING DATE's own
+    // nearest real HW (2026-07-25) -- matches runOptimizer()'s own display
+    // convention (planDateRefHwMs there) rather than each result's own
+    // per-instant anchor (r.refHwMs, which still drives the actual phase/
+    // tide physics via simulateRoute() and is unchanged). Keeping one
+    // shared reference for the DISPLAYED number regardless of sub-mode
+    // avoids the two modes silently disagreeing about what "+3h20m" means.
+    var offsetMin = Math.round((r.departureMs - nearestRealHwMs(plannedDepartureMs)) / 60000);
     if (r.unknown) {
       document.getElementById('result').innerHTML = 'No depth data available along this route — cannot assess feasibility.';
       document.getElementById('depth-led').innerHTML = '';
@@ -4225,25 +4334,21 @@
   // "too much text, needs scrolling" complaint); Mode 2 does the opposite
   // and additionally needs a fresh runOptimizer() call to populate the
   // per-waypoint schedule labels a route may not have had yet.
-  // Single toggle button, 2026-07-25 (user: "the button size changes when
+  // Single toggle button (2026-07-25, "the button size changes when
   // switching between Live and Calculated - simplify this into one toggle
-  // button") -- was two side-by-side buttons of very different label
-  // lengths, which made the row wrap differently (and so visibly resize)
-  // between modes; one button showing the CURRENT mode's own label, that
-  // toggles to the other mode on click, has nothing to visually jump.
-  function updateModeToggleButton() {
-    var btn = document.getElementById('mode-toggle-btn');
-    if (appMode === 'live') {
-      btn.textContent = '🕐 Live (map time)';
-      btn.title = 'Route reflects the Map Time widget\'s instant. Click to switch to Calculated mode (search departure times).';
-    } else {
-      btn.textContent = '▶ Calculated (departure search)';
-      btn.title = 'Searches departure times, labels each waypoint with its safe window. Click to switch to Live mode.';
-    }
+  // button"), then a pill switch the same day (user: "make the toggle...
+  // a pill switch and name them 'Live Map'/'Route Optimizer'") -- two
+  // explicit segments inside one rounded track (see #mode-pill's own CSS
+  // comment), each setting the mode directly rather than toggling.
+  function updateModePill() {
+    var liveBtn = document.getElementById('mode-btn-live');
+    var optBtn = document.getElementById('mode-btn-optimizer');
+    liveBtn.classList.toggle('active', appMode === 'live');
+    optBtn.classList.toggle('active', appMode === 'optimizer');
   }
   function setAppMode(mode) {
     appMode = mode;
-    updateModeToggleButton();
+    updateModePill();
     updateTimeBoxVisibility();
     document.getElementById('dep-search').style.display = mode === 'optimizer' ? 'block' : 'none';
     // The tidal-curve panel shows in BOTH modes (2026-07-23, repurposed
@@ -4261,9 +4366,8 @@
     }
     renderPanel();
   }
-  document.getElementById('mode-toggle-btn').addEventListener('click', function () {
-    setAppMode(appMode === 'live' ? 'optimizer' : 'live');
-  });
+  document.getElementById('mode-btn-live').addEventListener('click', function () { setAppMode('live'); });
+  document.getElementById('mode-btn-optimizer').addEventListener('click', function () { setAppMode('optimizer'); });
 
   // Colors the route for the chosen departure and adds a SoG label at each
   // leg's midpoint -- green if faster than STW, red if slower. Replaces the
@@ -4362,7 +4466,6 @@
       // whichever sampled point is shallowest right now, at this single
       // instant, the same severity convention (warn=dries, info=tight but
       // wet) already used by runOptimizer()'s own marker logic.
-      if (boatMarker) { map.removeLayer(boatMarker); boatMarker = null; }
       if (worstPt && worstDepth < required) {
         setConstraintMarker(worstPt,
           worstDepth <= 0 ? 'Dry at this time' : 'Shallow at this time',
@@ -4371,8 +4474,6 @@
       } else {
         setConstraintMarker(null);
       }
-    } else {
-      updateBoatMarker();
     }
   }
 
@@ -4400,62 +4501,6 @@
     lastRefHwMs = nearestRealHwMs(ms);
     var frac = realFracAt(ms);
     drawRouteCore(ms, frac, required, stwKn, ms);
-  }
-
-  // Boat position marker (2026-07-21, Windy.com-inspired user request) --
-  // reuses the exact same per-leg current/SOG walk drawRouteForDeparture()
-  // already does (same bearing/current/SOG formulas), just stopping as
-  // soon as accumulated elapsed time reaches displayedMs instead of
-  // walking the whole route, then interpolating within that leg. Before
-  // departure the boat sits at the start waypoint; after arrival it sits
-  // at the end waypoint -- exactly the behavior asked for, not just a
-  // clamped animation.
-  var boatMarker = null;
-  function boatIcon(brgDeg) {
-    return L.divIcon({
-      className: 'boat-icon',
-      html: '<div style="transform:rotate(' + (brgDeg === null ? 0 : brgDeg) + 'deg);font-size:22px;' +
-        'filter:drop-shadow(0 0 2px rgba(255,255,255,.9)) drop-shadow(0 0 1px rgba(0,0,0,.6))">⛵</div>',
-      iconSize: [24, 24], iconAnchor: [12, 12]
-    });
-  }
-  function boatPositionAt(atMs) {
-    if (waypoints.length < 2 || lastDrawDepartureMs === null) return null;
-    var elapsedTargetMin = (atMs - lastDrawDepartureMs) / 60000;
-    if (elapsedTargetMin <= 0) return { lat: waypoints[0].lat, lon: waypoints[0].lon, brgDeg: null };
-    var elapsedMin = 0;
-    for (var i = 1; i < waypoints.length; i++) {
-      var a = waypoints[i - 1], b = waypoints[i];
-      var distNm = distanceNm(a, b);
-      var brgDeg = bearingDeg(a, b), brgRad = brgDeg * Math.PI / 180;
-      var legStartMs = lastDrawDepartureMs + elapsedMin * 60000;
-      var phaseAtStart = phaseHoursAt(legStartMs, lastRefHwMs, grid.m2Hours);
-      var midLat = (a.lat + b.lat) / 2, midLon = (a.lon + b.lon) / 2;
-      var cur = currentKnAt(midLat, midLon, phaseAtStart, lastDrawFrac);
-      var alongTrackKn = cur.east * Math.sin(brgRad) + cur.north * Math.cos(brgRad);
-      var sogKn = Math.max(lastDrawStwKn + alongTrackKn, 0.3 * lastDrawStwKn);
-      var legDurationMin = (distNm / sogKn) * 60;
-      if (elapsedTargetMin <= elapsedMin + legDurationMin) {
-        var t = legDurationMin > 0 ? (elapsedTargetMin - elapsedMin) / legDurationMin : 0;
-        return { lat: a.lat + t * (b.lat - a.lat), lon: a.lon + t * (b.lon - a.lon), brgDeg: brgDeg };
-      }
-      elapsedMin += legDurationMin;
-    }
-    var last = waypoints[waypoints.length - 1];
-    return { lat: last.lat, lon: last.lon, brgDeg: null };
-  }
-  function updateBoatMarker() {
-    var pos = boatPositionAt(displayedMs);
-    if (!pos) {
-      if (boatMarker) { map.removeLayer(boatMarker); boatMarker = null; }
-      return;
-    }
-    if (boatMarker) {
-      boatMarker.setLatLng([pos.lat, pos.lon]);
-      boatMarker.setIcon(boatIcon(pos.brgDeg));
-    } else {
-      boatMarker = L.marker([pos.lat, pos.lon], { icon: boatIcon(pos.brgDeg), interactive: false, zIndexOffset: 1000 }).addTo(map);
-    }
   }
 
   setAppMode('live');
