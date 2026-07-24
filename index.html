@@ -4041,7 +4041,25 @@
 
     var resultHtml, pick = null;
     if (allFeasible) {
-      var pickPool = futureOnly(candidates);
+      // Restrict the recommendation to the CURRENT cycle only, not the
+      // full 2-cycle (25h) search window (2026-07-26, real bug -- user
+      // report: "Next cycle" sometimes showed no change at all, then
+      // jumped by TWO cycles at once, skipping a comparably-good option
+      // the user correctly expected to see e.g. on the afternoon rising
+      // tide). Root cause: with a fixed-current route, the fastest-
+      // passage phase recurs roughly every M2 cycle, so a 25h window
+      // (spanning ~2 cycles) usually contains TWO near-tied occurrences;
+      // the GLOBAL argmin over the whole window keeps preferring whichever
+      // is marginally better across several overlapping windows as
+      // plannedDepartureMs steps forward one cycle at a time, only
+      // "catching up" (by two cycles) once that occurrence finally falls
+      // out of range -- not the "steps through each cycle's own best,
+      // ~12.4h apart" behavior the Previous/Next buttons are meant to
+      // give. `candidates` itself (the full unfiltered 25h sweep) is
+      // untouched -- still feeds the feasibility chart/shading below.
+      var cycleHalfMin = grid.m2Hours * 30; // half of grid.m2Hours, in minutes
+      var thisCycle = candidates.filter(function (c) { return Math.abs(c.offsetMin) <= cycleHalfMin; });
+      var pickPool = futureOnly(thisCycle.length ? thisCycle : candidates);
       // Ranked by distance through water (2026-07-25, was totalH -- see
       // this function's own opening comment; identical selection today
       // under a fixed stwKn, but this is the criterion the user actually
