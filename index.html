@@ -277,9 +277,6 @@
   #result .dep-callout-label { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: .04em; }
   #result .dep-callout-time { font-size: 17px; font-weight: 800; color: #16324a; font-variant-numeric: tabular-nums; }
   #result .dep-callout.warn .dep-callout-time { color: #a11; }
-  #result .dep-callout-offset { font-size: 11px; color: #666; }
-  /* 2026-07-25 -- see depCallout()'s own comment for why this line exists. */
-  #result .dep-callout-hint { flex-basis: 100%; font-size: 10px; color: #888; }
   #result table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
   #result table td { padding: 2px 4px 2px 0; vertical-align: top; }
   #result table td:first-child { color: #444; white-space: nowrap; }
@@ -387,8 +384,6 @@
     <input type="checkbox" id="diag-depth"> Depth chart</label>
   <label class="hint" style="display:flex;align-items:center;gap:4px;cursor:pointer">
     <input type="checkbox" id="depth-probe"> Depth probe (hover)</label>
-  <label class="hint" style="display:flex;align-items:center;gap:4px;cursor:pointer" title="Shows a tidal curve for a station you pick from a dropdown, in the Map Time widget -- scrub the map time to move through it.">
-    <input type="checkbox" id="tidal-curves-toggle"> Tidal Curves</label>
   <label class="hint" style="display:flex;align-items:center;gap:4px;cursor:pointer" title="Simplified DEPARE (fast load, ~85% fewer vertices) is the default for both the safety-check query and the Depth chart overlay -- query results and rendering are both verified to match the native data closely (see Claude.md). Check this to load the real, full-detail charted DEPARE boundaries instead, at the cost of a much larger download.">
     <input type="checkbox" id="diag-depare-highdetail"> High-detail DEPARE (native)</label>
 </div>
@@ -409,7 +404,7 @@
       <button id="time-fwd-1h" title="Forward 1 hour">»</button>
     </div>
   </div>
-  <div id="tidal-curve-panel" style="display:none">
+  <div id="tidal-curve-panel">
     <select id="tidal-curve-station"></select>
     <canvas id="tidal-curve-canvas" width="230" height="110"></canvas>
     <div id="tidal-curve-legend"></div>
@@ -3048,11 +3043,6 @@
     var hasRoute = waypoints.length > 0;
     if (hasRoute && !_lastHadRoute) _onRouteRestarted();
     _lastHadRoute = hasRoute;
-    // Shared with updateTimeBoxVisibility()'s own panel-visibility check
-    // (see shouldShowTidalCurve()'s own comment) -- previously this read
-    // the raw checkbox alone, which could disagree with the panel actually
-    // being shown in 'departure'/'arrival' sub-modes.
-    if (!shouldShowTidalCurve()) return;
     var sel = document.getElementById('tidal-curve-station');
     // Auto-default: nearest station to the route's own departure point
     // (arrival point instead, in 'arrival' sub-mode -- 2026-07-25, "select
@@ -3095,42 +3085,21 @@
   // the .opt-mode-dot-* swatches (CSS, kept in sync by hand) and the Map
   // Time widget's own heading color below.
   var OPTIMIZER_MODE_COLORS = { auto: '#7cb342', departure: '#1e88e5', arrival: '#00897b' };
-  // Whether the tidal-curve panel should currently be drawing anything --
-  // shared by updateTimeBoxVisibility() (panel show/hide) and
-  // updateTidalCurveWidget() (the actual draw call), which used to each
-  // compute this slightly differently: the panel correctly forced itself
-  // on for 'departure'/'arrival' regardless of the checkbox, but the draw
-  // function still gated on the raw checkbox alone, so those two sub-modes
-  // could show an empty panel with nothing drawn in it if "Tidal Curves"
-  // had never been checked (2026-07-25, found investigating a "tidal
-  // display isn't synchronized" report -- a related but distinct bug from
-  // that report, fixed here regardless since it's a real inconsistency).
-  function shouldShowTidalCurve() {
-    var tidalOn = document.getElementById('tidal-curves-toggle').checked;
-    var manualMode = appMode === 'optimizer' && (optimizerSubMode === 'departure' || optimizerSubMode === 'arrival');
-    return tidalOn || manualMode;
-  }
-  // Shows/hides #time-box itself (visible in Live mode regardless, in the
-  // 'departure'/'arrival' optimizer sub-modes regardless -- see below --
-  // or in Optimizer 'auto' only if Tidal Curves is checked), its step-
-  // controls section (Live mode, or 'departure'/'arrival' where it drives
-  // manualDepartureMs/manualArrivalMs instead of displayedMs -- see
-  // stepSelectedTime()), and the tidal-curve panel. Also relabels the
-  // box's header (colored to match the active radio option, see
-  // OPTIMIZER_MODE_COLORS) for whichever instant the stepper is currently
-  // editing, and shows a small hint in 'departure'/'arrival' making clear
-  // the actual time is picked in this widget, not the radio row itself
-  // (user request, 2026-07-25).
+  // Shows/hides #time-box-step-section (Live mode, or 'departure'/'arrival'
+  // where it drives manualDepartureMs/manualArrivalMs instead of
+  // displayedMs -- see stepSelectedTime()) -- #time-box itself and the
+  // tidal-curve panel inside it are now ALWAYS visible in every mode
+  // (2026-07-25, user request: "remove the checkbox for switching the
+  // tidal curves, so that it's permanently visible in the map time
+  // window" -- the separate "Tidal Curves" checkbox this used to gate is
+  // gone). Also relabels the box's header (colored to match the active
+  // radio option, see OPTIMIZER_MODE_COLORS) for whichever instant the
+  // stepper is currently editing, and shows a small hint in 'departure'/
+  // 'arrival' making clear the actual time is picked in this widget, not
+  // the radio row itself (user request, 2026-07-25).
   function updateTimeBoxVisibility() {
-    // 'departure'/'arrival' force the curve panel on regardless of the
-    // checkbox (2026-07-25) -- the whole point of these sub-modes is
-    // looking at the tide before picking a time, so hiding it behind an
-    // easy-to-forget checkbox would defeat the feature.
     var manualMode = appMode === 'optimizer' && (optimizerSubMode === 'departure' || optimizerSubMode === 'arrival');
-    var showCurve = shouldShowTidalCurve();
-    document.getElementById('time-box').style.display = (appMode === 'live' || showCurve) ? '' : 'none';
     document.getElementById('time-box-step-section').style.display = (appMode === 'live' || manualMode) ? '' : 'none';
-    document.getElementById('tidal-curve-panel').style.display = showCurve ? '' : 'none';
     var label = document.getElementById('time-box-label');
     label.textContent =
       appMode === 'live' ? 'Map time' :
@@ -3147,10 +3116,6 @@
       hint.style.display = 'none';
     }
   }
-  document.getElementById('tidal-curves-toggle').addEventListener('change', function () {
-    updateTimeBoxVisibility();
-    updateTidalCurveWidget();
-  });
 
   // Compact icon-tile stats (2026-07-21, user request: "more with icons, not
   // too much narrative") -- four 2x2 glyph+number tiles, sourced from
@@ -3729,18 +3694,16 @@
   // information is the departure time (window) - highlight better") --
   // pulled out of the result table into its own high-contrast block instead
   // of competing with the other figures as just another row.
-  // Offset clarified 2026-07-25 (user asked directly what the parenthetical
-  // number means, and guessed "difference to the last cycle" -- it isn't;
-  // it's minutes from the planning date's own nearest REAL high water at
-  // the route's anchor station, see nearestRealHwMs()/anchorStation). Names
-  // the station and "high water" explicitly instead of a bare "(-3h40m)"
-  // that only makes sense if you already know the convention.
-  function depCallout(ms, offsetMin, warn, label) {
+  // Offset-from-reference-HW parenthetical (added 2026-07-25 to clarify
+  // what it meant after the user asked, then removed later the same day --
+  // "remove the parenthesis in the departure information window, this is
+  // more confusing than helpful"; the tidal curve's own feasibility color
+  // shading already conveys this timing information). Just the label and
+  // absolute time now.
+  function depCallout(ms, warn, label) {
     return '<div class="dep-callout' + (warn ? ' warn' : '') + '">' +
       '<div class="dep-callout-label">' + (label || 'Depart') + '</div>' +
       '<div class="dep-callout-time">' + fmtTime(ms) + '</div>' +
-      '<div class="dep-callout-offset">(' + fmtOffset(offsetMin) + ')</div>' +
-      '<div class="dep-callout-hint">vs ' + anchorStation.name + ' high water</div>' +
       '</div>';
   }
   // Depth-constraint LED (2026-07-25, replaces the old top status line +
@@ -3826,9 +3789,14 @@
     document.getElementById('preview-next').disabled = previewIndex === lastPreviewArrivals.length - 1;
     document.getElementById('route-preview-label').textContent =
       'Waypoint ' + (previewIndex + 1) + ' of ' + lastPreviewArrivals.length;
+    // "Latest Arrival" in arrival sub-mode (2026-07-25, user request) --
+    // reframes the same value as a deadline ("don't be later than this at
+    // this waypoint, or you'll miss the target arrival at the end") rather
+    // than a plain prediction, matching this sub-mode's whole point of
+    // showing whether the user is falling behind their target.
     var lines = [
       'Distance so far: ' + pt.distNm.toFixed(2) + ' nm',
-      'Arrival: ' + fmtTime(pt.ms)
+      (optimizerSubMode === 'arrival' ? 'Latest Arrival: ' : 'Arrival: ') + fmtTime(pt.ms)
     ];
     // Arrival-mode-only (user: "show the time required to reach the
     // endpoint ... so the user can see if he is late and won't make it") --
@@ -4004,22 +3972,7 @@
       // wants tracked).
       pick = pickPool.reduce(function (a, b) { return b.distThroughWaterNm < a.distThroughWaterNm ? b : a; });
       lastPick = pick; // icon-tile grid's own passage/thru-water (updateStatsTiles)
-      var slowest = pickPool.reduce(function (a, b) { return b.distThroughWaterNm > a.distThroughWaterNm ? b : a; });
       var minMargin = pickPool.reduce(function (a, b) { return b.worstClearance < a.worstClearance ? b : a; }).worstClearance;
-      // The bracketed passage-time duration this row used to also show
-      // (e.g. "3.45 nm (0.75 h)") was dropped 2026-07-25 (user: "what does
-      // the time information in parenthesis mean? if redundant, remove
-      // it") -- it's directly implied by distance-through-water at this
-      // boat's own fixed STW, and wasn't adding information the nm figure
-      // didn't already carry.
-      // "at +Xh Ym" (2026-07-25, was a bare offset prefix -- user asked what
-      // it meant) -- makes explicit that this is WHEN in the search window
-      // the slowest departure falls (same vs-anchor-station-HW convention
-      // as the callout above), not some other quantity.
-      var slowerRow = slowest.distThroughWaterNm - pick.distThroughWaterNm > 0.01
-        ? row('Longest distance through water in window', 'at ' + fmtOffset(slowest.offsetMin) + ' — ' +
-            slowest.distThroughWaterNm.toFixed(2) + ' nm')
-        : row('Current effect', 'negligible — any departure in this window is about the same');
       // LED (2026-07-25): every departure in the search window clears, but
       // still amber (not green) if the margin dips below 0.5 m anywhere --
       // "all clear" should mean comfortably clear, not just non-negative.
@@ -4028,11 +3981,17 @@
         : depthLedHtml('green', 'All clear — comfortable margin throughout this window');
       // Passage/Distance-through-water dropped from this table 2026-07-23 --
       // now shown in the icon-tile grid above instead (see updateStatsTiles).
+      // "Margin at tightest point" (2026-07-25, was "Min. clearance in
+      // window" -- user: "use the same terminology for margin, not min.
+      // clearance", matching the manual sub-modes' own wording). The
+      // "Longest distance through water in window" row (timing info for
+      // the slowest candidate) was removed the same day -- user: "we are
+      // not going to provide time window information here - that's
+      // already clear from the color shading in the tidal curve."
       resultHtml =
-        depCallout(pick.departureMs, pick.offsetMin, false, 'Optimum departure') +
+        depCallout(pick.departureMs, false, 'Optimum departure') +
         '<table>' +
-        row('Min. clearance in window', minMargin.toFixed(2) + ' m') +
-        slowerRow +
+        row('Margin at tightest point', minMargin.toFixed(2) + ' m') +
         '</table>';
       setConstraintMarker(null);
       lastPreviewArrivals = waypointArrivals(pick.departureMs, stwKn, pick.refHwMs, pick.frac);
@@ -4082,7 +4041,7 @@
       // Distance-through-water (now shown in the icon-tile grid above --
       // see updateStatsTiles -- instead of duplicated here as plain text).
       resultHtml =
-        depCallout(pick.departureMs, pick.offsetMin, false, 'Recommended departure') +
+        depCallout(pick.departureMs, false, 'Recommended departure') +
         '<table>' +
         row('Margin at tightest point', pick.worstClearance.toFixed(2) + ' m') +
         row(windowWord, fmtOffset(candidates[bestWindow.start].offsetMin) + ' to ' + fmtOffset(candidates[bestWindow.end].offsetMin)) +
@@ -4136,7 +4095,7 @@
         // leg's own waypoint numbers (see simulateRoute's wpFrom/wpTo).
         var wpText = pick.blockPoint ? ' (near waypoint ' + pick.blockPoint.wpFrom + '–' + pick.blockPoint.wpTo + ')' : '';
         resultHtml =
-          depCallout(pick.departureMs, pick.offsetMin, true, 'Optimum departure until blockage') +
+          depCallout(pick.departureMs, true, 'Optimum departure until blockage') +
           '<table>' +
           row('Reached', pick.reachedNm.toFixed(2) + ' of ' + pick.totalNm.toFixed(2) + ' nm' + wpText);
         if (pick.blockPoint) {
@@ -4195,14 +4154,6 @@
   // already use, just collapsed to one candidate instead of a window.
   function renderManualResult(r, stwKn, required, depLabel, extraRowHtml) {
     lastRefHwMs = r.refHwMs;
-    // Offset shown in the callout is relative to the PLANNING DATE's own
-    // nearest real HW (2026-07-25) -- matches runOptimizer()'s own display
-    // convention (planDateRefHwMs there) rather than each result's own
-    // per-instant anchor (r.refHwMs, which still drives the actual phase/
-    // tide physics via simulateRoute() and is unchanged). Keeping one
-    // shared reference for the DISPLAYED number regardless of sub-mode
-    // avoids the two modes silently disagreeing about what "+3h20m" means.
-    var offsetMin = Math.round((r.departureMs - nearestRealHwMs(plannedDepartureMs)) / 60000);
     if (r.unknown) {
       document.getElementById('result').innerHTML = 'No depth data available along this route — cannot assess feasibility.';
       document.getElementById('depth-led').innerHTML = '';
@@ -4218,7 +4169,7 @@
       document.getElementById('depth-led').innerHTML = r.worstClearance < 0.5
         ? depthLedHtml('amber', 'Feasible, but margin drops below 0.5 m at times')
         : depthLedHtml('green', 'Clears the whole route with a comfortable margin');
-      resultHtml = depCallout(r.departureMs, offsetMin, false, depLabel) +
+      resultHtml = depCallout(r.departureMs, false, depLabel) +
         '<table>' + (extraRowHtml || '') +
         row('Margin at tightest point', r.worstClearance.toFixed(2) + ' m') +
         '</table>';
@@ -4227,7 +4178,7 @@
       document.getElementById('depth-led').innerHTML =
         depthLedHtml('red', 'This departure does not clear the whole route');
       var wpText = r.blockPoint ? ' (near waypoint ' + r.blockPoint.wpFrom + '–' + r.blockPoint.wpTo + ')' : '';
-      resultHtml = depCallout(r.departureMs, offsetMin, true, depLabel) +
+      resultHtml = depCallout(r.departureMs, true, depLabel) +
         '<table>' + (extraRowHtml || '') +
         row('Reached', r.reachedNm.toFixed(2) + ' of ' + r.totalNm.toFixed(2) + ' nm' + wpText);
       if (r.blockPoint) {
@@ -4256,7 +4207,12 @@
     var r = simulateRoute(departureMs, stwKn, refHwMs, frac, required);
     r.departureMs = departureMs; r.refHwMs = refHwMs; r.frac = frac;
     r.distThroughWaterNm = stwKn * r.totalH;
-    renderManualResult(r, stwKn, required, 'Departure', '');
+    // Arrival time at the final waypoint (2026-07-25, user: "for departure
+    // mode add the arrival time") -- the resulting completion time for this
+    // picked departure, shown as a row the same way arrival mode shows its
+    // own "Target arrival" (see runManualArrival()).
+    var extraRow = row('Arrival', fmtTime(departureMs + r.totalH * 3600000));
+    renderManualResult(r, stwKn, required, 'Departure', extraRow);
   }
   // Sub-mode 'arrival': "I have to arrive at a certain harbour at high
   // tide" -- back-solve a departure instant that makes the route's LAST
