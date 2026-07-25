@@ -46,6 +46,13 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "Refresh RWS tide predictions (scheduled)"
+            # Pull-rebase before pushing (2026-07-25, real failure seen in
+            # testing: "! [rejected] main -> main (fetch first)") -- the
+            # checkout at the start of this run can be behind the remote
+            # by the time this step pushes, if anything else landed on
+            # main in between. Rebasing this one commit onto whatever's
+            # newest avoids a non-fast-forward rejection.
+            git pull --rebase origin main
             git push
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
