@@ -339,6 +339,37 @@
     border: 1px solid #16324a; background: #16324a; color: #fff; border-radius: 4px; cursor: pointer;
   }
   #load-popup-close:hover { background: #204a70; }
+  /* About box (2026-07-25, user request) -- author/contact info + a link
+     to the full data-sources/disclaimer page (disclaimer.html), reusing
+     the load-popup's own modal pattern (fixed backdrop + centered card)
+     rather than inventing a second one. Hidden by default (no "show" on
+     the backdrop), unlike #load-popup-backdrop which is visible from the
+     very first paint. */
+  #about-popup-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 2000;
+    display: none; align-items: center; justify-content: center;
+  }
+  #about-popup-backdrop.show { display: flex; }
+  #about-popup {
+    background: #fff; border-radius: 8px; padding: 20px 26px; max-width: 340px;
+    text-align: left; box-shadow: 0 4px 24px rgba(0,0,0,.4);
+    font-family: system-ui, sans-serif; font-size: 13px; color: #333; line-height: 1.5;
+  }
+  #about-popup h2 { font-size: 16px; color: #16324a; margin: 0 0 8px; }
+  #about-popup a { color: #16324a; }
+  #about-popup dl { margin: 10px 0; }
+  #about-popup dt { font-weight: 700; color: #16324a; }
+  #about-popup dd { margin: 0 0 8px; }
+  #about-popup-close {
+    margin-top: 10px; padding: 5px 18px; font-size: 13px;
+    border: 1px solid #16324a; background: #16324a; color: #fff; border-radius: 4px; cursor: pointer;
+  }
+  #about-popup-close:hover { background: #204a70; }
+  #bar-about-btn {
+    background: transparent; border: 1px solid #3a6f96; color: #cfe3f0;
+    border-radius: 4px; padding: 2px 9px; font-size: 12px; cursor: pointer;
+  }
+  #bar-about-btn:hover { background: #245173; color: #fff; }
   #disclaimer {
     position: absolute; bottom: 0; left: 0; right: 0; height: 28px;
     background: #16324a; color: #cfd8dc; font-size: 11px;
@@ -382,8 +413,26 @@
     <button id="load-popup-close">OK</button>
   </div>
 </div>
+<div id="about-popup-backdrop">
+  <div id="about-popup">
+    <h2>Tidal Router</h2>
+    <div>A free, browser-based pre-departure planning tool for the Netherlands + Germany Wadden Sea.</div>
+    <dl>
+      <dt>Author</dt>
+      <dd>Thorbjoern Schoenbeck</dd>
+      <dt>Contact</dt>
+      <dd><a href="mailto:chondrit@mac.com">chondrit@mac.com</a></dd>
+      <dt>Data sources &amp; disclaimer</dt>
+      <dd><a href="disclaimer.html">Full data sources, limitations &amp; navigation disclaimer →</a></dd>
+      <dt>Source code</dt>
+      <dd><a href="https://github.com/tristan2202/tidal_planner" target="_blank" rel="noopener">github.com/tristan2202/tidal_planner</a> (MIT license)</dd>
+    </dl>
+    <button id="about-popup-close">Close</button>
+  </div>
+</div>
 <div id="bar">
   <strong>Tidal Router</strong>
+  <button id="bar-about-btn" title="About this app / contact / data disclaimer">ℹ️ About</button>
   <div id="bar-boat">
     <label>STW<input type="number" id="stw" value="5" min="0.5" step="0.5" title="Boat speed through water (kn)"></label>
     <label>Draft<input type="number" id="draft" value="1.2" min="0" step="0.1" title="Draft (m)"></label>
@@ -480,7 +529,7 @@
   <ul id="wplist"></ul>
 </div>
 <div id="disclaimer">
-  Planning tool — not for navigation. Depth safety first, passage speed second. SoG labels: green = faster than STW, red = slower.
+  Planning tool — not for navigation. Depth safety first, passage speed second. SoG labels: green = faster than STW, red = slower. <a href="disclaimer.html" style="color:#cfd8dc">Full disclaimer &amp; data sources →</a>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -613,6 +662,18 @@
   // would silently undercount exactly the wait this popup exists to report.
   document.getElementById('load-popup-close').addEventListener('click', function () {
     document.getElementById('load-popup-backdrop').style.display = 'none';
+  });
+
+  // About box (2026-07-25) -- pure DOM wiring, no dependency on the binary
+  // grids/startApp(), so it's wired here rather than inside startApp().
+  document.getElementById('bar-about-btn').addEventListener('click', function () {
+    document.getElementById('about-popup-backdrop').classList.add('show');
+  });
+  document.getElementById('about-popup-close').addEventListener('click', function () {
+    document.getElementById('about-popup-backdrop').classList.remove('show');
+  });
+  document.getElementById('about-popup-backdrop').addEventListener('click', function (e) {
+    if (e.target === this) this.classList.remove('show');
   });
 
   // Binary grid loader (2026-07-24) -- see Claude.md. Reconstructs the

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tidal Router — Data sources &amp; disclaimer</title>
+<meta name="description" content="Data sources, known limitations, and the navigation disclaimer for Tidal Router, a free Wadden Sea departure-time and route planner.">
+<style>
+  html, body { margin: 0; font-family: system-ui, sans-serif; color: #222; background: #f4f6f8; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 20px 60px; }
+  a { color: #16324a; }
+  .top-nav { margin-bottom: 18px; font-size: 14px; }
+  h1 { font-size: 22px; color: #16324a; margin: 0 0 4px; }
+  h2 { font-size: 17px; color: #16324a; margin: 30px 0 8px; border-bottom: 1px solid #ccd7de; padding-bottom: 4px; }
+  .tagline { color: #555; font-size: 14px; margin-bottom: 20px; }
+  .disclaimer-box {
+    background: #fff4e5; border: 2px solid #c96f00; border-radius: 6px;
+    padding: 16px 20px; margin: 16px 0 24px;
+  }
+  .disclaimer-box h2 { margin-top: 0; border: none; color: #a3540a; }
+  .disclaimer-box ul { margin: 10px 0 0; padding-left: 20px; }
+  .disclaimer-box li { margin-bottom: 8px; line-height: 1.5; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  th { background: #eef2f5; color: #16324a; }
+  ul.limits li { margin-bottom: 10px; line-height: 1.5; }
+  .cadence dt { font-weight: 700; color: #16324a; margin-top: 10px; }
+  .cadence dd { margin: 2px 0 0; }
+  footer { margin-top: 40px; font-size: 12px; color: #777; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top-nav"><a href="index.html">← Back to Tidal Router</a></div>
+  <h1>Tidal Router — data sources &amp; disclaimer</h1>
+  <div class="tagline">A free, browser-based pre-departure planning tool for the Netherlands + Germany Wadden Sea.</div>
+
+  <div class="disclaimer-box">
+    <h2>⚠️ Disclaimer — read before using</h2>
+    <strong>This tool is for passage planning only. It is not a navigational aid and must never be used as the sole or primary means of navigation.</strong>
+    <ul>
+      <li>All data shown (current, water level, tide timing, and especially charted depth) is derived from third-party sources listed below, on the schedule described below. It may be <strong>stale, incomplete, or wrong</strong> — see "Known limitations" for specific, disclosed gaps.</li>
+      <li><strong>Always cross-check against official, up-to-date nautical charts, Notices to Mariners, tide tables, and pilotage guidance from your national hydrographic authority</strong> before and during any passage. This tool does not replace them and is not corrected against real-time Notices to Mariners.</li>
+      <li>The Wadden Sea's channels and sandbanks shift over time (storms, dredging, natural drift). A channel shown as safe here may no longer be safe, and a channel shown as shallow/blocked may since have been dredged or changed.</li>
+      <li>This is a hobby project, not a certified or professionally audited navigation product. It has no affiliation with, and is not endorsed by, RWS, BSH, BAW, or any hydrographic office.</li>
+      <li><strong>No warranty of any kind is given or implied</strong> — not of accuracy, completeness, fitness for a particular purpose, or availability. The author(s) accept <strong>no liability whatsoever</strong> for any loss, damage, injury, grounding, delay, or other consequence arising from use of this tool, its data, or its output, to the fullest extent permitted by law.</li>
+      <li><strong>Use entirely at your own risk.</strong> You, the skipper, remain solely responsible for the safe navigation of your vessel at all times.</li>
+    </ul>
+  </div>
+
+  <h2>Data sources, and what they don't cover</h2>
+  <table>
+    <tr><th>Data</th><th>Source</th><th>Coverage / notes</th></tr>
+    <tr>
+      <td>Tidal current + water level</td>
+      <td><a href="https://trilawatt.eu/en/" target="_blank" rel="noopener">TrilaWatt Hydrodynamik</a> (BAW/mFUND, CC-BY 4.0)</td>
+      <td>A 2022 model run, not a live forecast — one representative year's tidal cycle, keyed by tidal phase. Won't reflect unusual wind-driven surge/set or any change since 2022.</td>
+    </tr>
+    <tr>
+      <td>Charted depth (Netherlands)</td>
+      <td>RWS official ENC (SOUNDG/DEPARE) via <a href="https://www.vaarweginformatie.nl/" target="_blank" rel="noopener">vaarweginformatie.nl</a></td>
+      <td>Real official chart data, RWS-corrected roughly weekly via Notices to Mariners upstream — but this app's own copy is a periodic snapshot, not live. ~72% of the Dutch domain has official coverage; the remaining ~28% (mostly open sea north of the barrier islands) falls back to the older TrilaWatt model bathymetry.</td>
+    </tr>
+    <tr>
+      <td>Charted depth (Germany)</td>
+      <td>BSH public WMS data, via the <a href="https://github.com/quantenschaum/mapping/tree/bsh-data" target="_blank" rel="noopener">quantenschaum/mapping</a> community mirror (GeoNutzV license)</td>
+      <td>Sparser sounding density than the Dutch side; refreshed on that project's own irregular schedule, not RWS's weekly cadence.</td>
+    </tr>
+    <tr>
+      <td>Chart tiles (visual basemap)</td>
+      <td><a href="https://freenauticalchart.net/" target="_blank" rel="noopener">freenauticalchart.net</a> (CC0, BSH/RWS-derived)</td>
+      <td>Visual reference only — explicitly not for navigation per its own license terms, same as this whole tool.</td>
+    </tr>
+    <tr>
+      <td>Tide predictions, Netherlands (HW/LW timing)</td>
+      <td>RWS <a href="https://waterinfo.rws.nl/" target="_blank" rel="noopener">waterinfo.rws.nl</a> astronomical API</td>
+      <td>Real per-station predictions, Harlingen used as this app's own reference clock.</td>
+    </tr>
+    <tr>
+      <td>Tide predictions, Germany (HW/LW timing)</td>
+      <td><a href="https://gezeiten.bsh.de/" target="_blank" rel="noopener">gezeiten.bsh.de</a></td>
+      <td>Real predictions for 5 German stations (Borkum, Norderney, Wilhelmshaven, Cuxhaven, List auf Sylt).</td>
+    </tr>
+    <tr>
+      <td>Measured water level, Netherlands</td>
+      <td>RWS <a href="https://waterinfo.rws.nl/" target="_blank" rel="noopener">waterinfo.rws.nl</a></td>
+      <td>Fetched live on every page load.</td>
+    </tr>
+    <tr>
+      <td>Measured water level, Germany</td>
+      <td><a href="https://www.pegelonline.wsv.de/" target="_blank" rel="noopener">PEGELONLINE</a> (WSV)</td>
+      <td>Fetched live on every page load, directly from the browser.</td>
+    </tr>
+  </table>
+
+  <h2>Known limitations</h2>
+  <ul class="limits">
+    <li><strong>Germany's departure-time optimizer borrows the Netherlands' (Harlingen) real-calendar tidal reference clock</strong>, not its own. The underlying current/depth data for German routes is genuine BSH/TrilaWatt data, but the moment in the tidal cycle it's evaluated against may not exactly match Germany's own true tidal state at that instant.</li>
+    <li><strong>Routes crossing the Netherlands/Germany border are not blended</strong> — there is a visible seam where the two countries' independent models meet.</li>
+    <li><strong>German harbour timing offsets are not yet researched</strong> (Netherlands' stations have real, sourced HW-timing corrections relative to the reference station; Germany's do not yet).</li>
+    <li><strong>This is a planning tool, not a live forecast</strong> for current/water level magnitude — see the TrilaWatt row above.</li>
+    <li>Depth values are smoothed/composited from multiple official and model sources with different resolutions and vintages; a single very recent, very local change (e.g. a storm reshaping a channel overnight) will not be reflected until the underlying data is refreshed and this app's data is re-extracted.</li>
+  </ul>
+
+  <h2>How current is the data, right now?</h2>
+  <dl class="cadence">
+    <dt>Measured water level (both countries)</dt>
+    <dd>Genuinely live, refetched on every page load.</dd>
+    <dt>Tide predictions (HW/LW timing)</dt>
+    <dd>Real astronomical predictions. Netherlands: refreshed automatically every week (limited by a rolling ~16-day upstream window). Germany: refreshed manually, roughly once a year, since the upstream source publishes a full year+ at a time.</dd>
+    <dt>Charted depth</dt>
+    <dd>Refreshed occasionally, not on a fixed schedule — see each source's own upstream update cadence above.</dd>
+    <dt>Tidal current/water-level model</dt>
+    <dd>Tied to a single fixed model year (2022) and only re-extracted if the source project (TrilaWatt/BAW) publishes an actual new model version — a rare, announced event, not something re-running the extraction on the same source data would improve.</dd>
+  </dl>
+
+  <footer>
+    Tidal Router — source code MIT-licensed. Chart/data licenses are as noted per source above; this project does not claim ownership of any third-party data it displays.
+  </footer>
+</div>
+</body>
+</html>

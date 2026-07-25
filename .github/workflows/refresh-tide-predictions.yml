@@ -21,6 +21,17 @@ on:
 permissions:
   contents: write
 
+# Prevents overlapping runs (2026-07-25, real failure seen in testing --
+# manually re-triggering this while a previous run was still in flight
+# raced two "commit + push" attempts against each other; the loser always
+# gets a non-fast-forward rejection no matter how the push itself is
+# written, since by the time it pushes the winner has already moved
+# main). Queues instead of cancelling so a run that's already fetched/
+# committed always gets to finish rather than being torn down mid-push.
+concurrency:
+  group: refresh-tide-predictions
+  cancel-in-progress: false
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
