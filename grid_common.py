@@ -455,21 +455,32 @@ def round_geom(geom, ndigits=6):
 
 
 def write_enc_geojson(features, out_path, var_name="ENC_FEATURES_T17"):
-    # .js-wrapped, not raw .geojson -- matches every other generated data
-    # file this app loads via a plain <script src> tag, so the browser
-    # never needs fetch()/CORS handling for local files.
+    # Plain .json for anything the app fetch()-loads (2026-07-25, real
+    # page-load-time fix -- see Claude.md): SOUNDG and the simplified DEPARE
+    # files used to be .js-wrapped (`var NAME = {...};`) and loaded via a
+    # blocking <script src>, which forces the browser to parse tens of MB
+    # of JS source (much slower than JSON.parse) before anything else can
+    # run, all before the load-time popup's own timer even starts. Now
+    # fetch()-loaded in parallel with the binary grids instead -- see
+    # _loadJsonGlobal() in index.html. Only the *native* (lazy, on-demand)
+    # DEPARE files -- enc_features_t17.js/enc_features_de.js -- still use
+    # the .js-wrapped form, since those are genuinely injected as a
+    # <script> tag on demand (_loadNativeDepareFor()), not fetch()-loaded.
     fc = {"type": "FeatureCollection", "features": features}
+    is_json = out_path.endswith(".json")
     with open(out_path, "w") as f:
-        f.write("// Auto-generated -- do not hand-edit.\n")
-        f.write("// Real ENC/BSH vector features, kept as actual geometry (not\n")
-        f.write("// rasterized) -- see Claude.md for the vector-tile depth rewrite and\n")
-        f.write("// (if this is the _simplified file) the DEPARE-simplification\n")
-        f.write("// comparison. Every feature has a normalized depth_lat property\n")
-        f.write("// (metres below LAT, positive = deeper), matching Nautinect's own\n")
-        f.write("// convention.\n")
-        f.write(f"var {var_name} = ")
+        if not is_json:
+            f.write("// Auto-generated -- do not hand-edit.\n")
+            f.write("// Real ENC/BSH vector features, kept as actual geometry (not\n")
+            f.write("// rasterized) -- see Claude.md for the vector-tile depth rewrite and\n")
+            f.write("// (if this is the _simplified file) the DEPARE-simplification\n")
+            f.write("// comparison. Every feature has a normalized depth_lat property\n")
+            f.write("// (metres below LAT, positive = deeper), matching Nautinect's own\n")
+            f.write("// convention.\n")
+            f.write(f"var {var_name} = ")
         json.dump(fc, f, separators=(",", ":"))
-        f.write(";\n")
+        if not is_json:
+            f.write(";\n")
     print(f"wrote {out_path} ({len(features)} features)")
 
 

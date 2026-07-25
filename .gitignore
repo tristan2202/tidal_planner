@@ -11,6 +11,15 @@ screenshot_*.png
 shallow_dots_*.png
 extract_log.txt
 
+# Deployment-mechanics docs, kept locally for the maintainer's own future
+# reference but deliberately NOT published (2026-07-25, user request) --
+# the public repo should read as documentation of what the app does and
+# where its data comes from, not a step-by-step guide to standing up a
+# competing instance on someone else's Cloudflare account.
+DEPLOY.md
+MAINTENANCE.md
+redeploy.ps1
+
 # Oversized data files (over Cloudflare Pages' 25 MiB per-file limit) --
 # these are hosted in Cloudflare R2 instead and served by
 # functions/_middleware.js, NOT committed to this repo. Re-generate them
@@ -20,5 +29,5 @@ current_grid_de.bin
 current_grid.bin
 water_level_grid_de.bin
 water_level_grid.bin
-enc_soundg_native_t17.js
+enc_soundg_t17.json
 enc_features_t17.js

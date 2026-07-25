@@ -24,12 +24,27 @@
 // -> R2 bucket bindings), with these 6 files uploaded to it under their
 // own plain filenames (no folder prefix) -- see DEPLOY.md for the exact
 // `wrangler r2 object put` commands.
+//
+// GZIP -- TRIED AND REVERTED, 2026-07-25 (see Claude.md): manually
+// gzip-compressing these files and setting Content-Encoding: gzip here
+// looked like an easy ~5x size win, but verified (against the REAL
+// Cloudflare edge, via curl, Node fetch, AND a real Chromium browser via
+// Playwright -- not just local `wrangler pages dev`) that the client
+// receives the still-compressed bytes unmodified despite the header --
+// Cloudflare Pages Functions do not get this decompressed transparently
+// the way a normal precompressed static asset would. Confirmed via a
+// scratch test endpoint before touching any real data, then reverted
+// before it ever reached production. Don't re-attempt this exact approach
+// without a different mechanism (e.g. decompressing server-side with
+// DecompressionStream before responding, at the cost of Worker CPU time --
+// not attempted, since it reintroduces the very CPU-budget risk that ruled
+// out on-the-fly compression in the other direction).
 const R2_FILES = new Set([
   'current_grid_de.bin',
   'current_grid.bin',
   'water_level_grid_de.bin',
   'water_level_grid.bin',
-  'enc_soundg_native_t17.js',
+  'enc_soundg_t17.json',
   'enc_features_t17.js'
 ]);
 

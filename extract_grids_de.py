@@ -270,14 +270,14 @@ if __name__ == "__main__":
         features = gc.load_enc_features("enc_features_de.js")
         depare = [f for f in features if f["properties"]["layer"] == "DEPARE"]
         simplified = gc.simplify_depare_features(depare)
-        gc.write_enc_geojson(simplified, "enc_features_de_simplified.js", var_name="ENC_FEATURES_DE_SIMPLIFIED")
+        gc.write_enc_geojson(simplified, "enc_features_de_simplified.json", var_name="ENC_FEATURES_DE_SIMPLIFIED")
         sys.exit(0)
     elif geojson_only:
         features = extract_enc_geojson_features_de()
         depare = [f for f in features if f["properties"]["layer"] == "DEPARE"]
         soundg = [f for f in features if f["properties"]["layer"] == "SOUNDG"]
         gc.write_enc_geojson(depare, "enc_features_de.js", var_name="ENC_FEATURES_DE")
-        gc.write_enc_geojson(soundg, "enc_soundg_native_de.js", var_name="ENC_SOUNDG_DE")
+        gc.write_enc_geojson(soundg, "enc_soundg_de.json", var_name="ENC_SOUNDG_DE")
         sys.exit(0)
 
     grid = None

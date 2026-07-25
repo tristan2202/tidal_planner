@@ -3,7 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tidal Router</title>
+<title>Tidal Router — free Wadden Sea departure-time &amp; route planner</title>
+<meta name="description" content="Free, browser-based passage planner for the Netherlands + Germany Wadden Sea: draw a route and find the departure time that rides the tidal stream while keeping your draft clear of the bottom the whole way, using real gridded current and official chart depth data.">
+<meta property="og:title" content="Tidal Router — free Wadden Sea departure-time &amp; route planner">
+<meta property="og:description" content="Draw a route through the Wadden Sea and find the safest, fastest departure time — real tidal current data, official chart depth, no install, no account, free.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tidal-planner.pages.dev/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Tidal Router — free Wadden Sea departure-time &amp; route planner">
+<meta name="twitter:description" content="Draw a route through the Wadden Sea and find the safest, fastest departure time — real tidal current data, official chart depth, no install, no account, free.">
+<!-- _loadStartMs captured here, as early in <head> as possible -- before the
+     Leaflet CSS/JS, the ENC/tide-prediction scripts, and the binary-grid
+     fetches all further down the page -- so the load-time popup (see
+     _loadStartMs usage near the bottom of this file) reports the real
+     wall-clock wait a visitor actually experiences, not just the time since
+     whatever earlier scripts happened to already finish (2026-07-25, real
+     page-load-time investigation -- see Claude.md). -->
+<script>window._loadStartMs = performance.now();</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
@@ -573,28 +589,28 @@
 <script src="pegelonline_waterlevel_dagebuell.js"></script>
 <script src="pegelonline_waterlevel_hoernum.js"></script>
 <!-- enc_features_t17.js (native, full-detail DEPARE, 84.5 MB) is deliberately
-     NOT eager-loaded here (2026-07-23, real page-load-time fix -- see
-     Claude.md) -- it's fetched on demand only if the user checks "High-
-     detail DEPARE (native)" in the top bar, via _loadNativeDepare() below.
-     enc_soundg_native_t17.js is SOUNDG-only (split out of the same source
-     file) and stays eager: the shallow-water query needs real soundings
-     regardless of which DEPARE dataset is active. -->
-<script src="enc_soundg_native_t17.js"></script>
-<script src="enc_features_t17_simplified.js"></script>
-<!-- Germany's own vector ENC/BSH features (2026-07-24, added after the
-     initial full-domain-widening pass shipped a raster-only overlay for
-     Germany) -- same eager-SOUNDG/eager-simplified-DEPARE/lazy-native
-     pattern as NL's own three files above. Much smaller than NL's (BSH's
-     own DEPARE/SOUNDG density here is lower), so no extra lazy-loading
-     concern for the simplified/SOUNDG pair. -->
-<script src="enc_soundg_native_de.js"></script>
-<script src="enc_features_de_simplified.js"></script>
+     NOT eager-loaded here -- it's fetched on demand only if the user checks
+     "High-detail DEPARE (native)" in the top bar, via _loadNativeDepare()
+     below. enc_soundg_t17.json (SOUNDG-only) and enc_features_t17_simplified
+     .json/enc_soundg_de.json/enc_features_de_simplified.json ARE needed
+     unconditionally (shallow-water query, default DEPARE view) but are no
+     longer loaded via a blocking <script src> here (2026-07-25, real
+     page-load-time fix -- see Claude.md): a plain `var NAME = {...huge...};`
+     script forces the browser to parse tens of MB as JS source, which is
+     much slower than JSON.parse, and blocks page rendering while doing it
+     -- all before the load-time popup's own timer even starts. These 4 are
+     now fetch()-loaded as plain JSON, in parallel with the 6 binary grids,
+     by _loadJsonGlobal() below. -->
 <script>
   // Load-time popup (2026-07-23) -- real measured elapsed time from page
   // parse to startApp() actually running, not the static ~20-30s estimate
   // shown in the popup's initial text. performance.now() (not Date.now())
-  // since this is a duration, not a calendar timestamp.
-  var _loadStartMs = performance.now();
+  // since this is a duration, not a calendar timestamp. _loadStartMs itself
+  // is now set as early as possible at the top of <head> (2026-07-25, see
+  // that script's own comment) -- NOT re-captured here, since by this point
+  // in the document every eager <script src> above (tide predictions, RWS/
+  // PEGELONLINE water level) has already loaded, and re-capturing here
+  // would silently undercount exactly the wait this popup exists to report.
   document.getElementById('load-popup-close').addEventListener('click', function () {
     document.getElementById('load-popup-backdrop').style.display = 'none';
   });
@@ -662,6 +678,29 @@
     }).catch(function (err) {
       console.warn('grid load failed for ' + metaUrl + ': ' + err.message);
       return null;
+    });
+  }
+
+  // fetch()+JSON.parse replacement for what used to be a blocking
+  // <script src> assigning a `var NAME = {...huge...};` literal
+  // (2026-07-25, real page-load-time fix -- see Claude.md and the ENC
+  // script-tag comment above). Sets window[varName] itself, matching the
+  // exact global the old <script> tag used to create -- every consumer
+  // (_currentDepareFeatures/_currentSoundgFeatures etc.) already reads via
+  // `window[varName]` with a `typeof ... === 'undefined'` guard, so this is
+  // a drop-in replacement with zero changes needed anywhere else, as long
+  // as it resolves before startApp() runs (it's in the same Promise.all
+  // below). Resolves to undefined (not throwing) on failure, same
+  // fail-soft behavior as _loadBinaryGrid -- a missing ENC file degrades
+  // that region's depth query, it shouldn't block the whole app.
+  function _loadJsonGlobal(url, varName) {
+    return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error(url + ': HTTP ' + r.status);
+      return r.json();
+    }).then(function (data) {
+      window[varName] = data;
+    }).catch(function (err) {
+      console.warn('JSON load failed for ' + url + ': ' + err.message);
     });
   }
 
@@ -4691,13 +4730,23 @@
   // warning) on a fetch failure, so this degrades gracefully -- e.g. before
   // extract_grids_de.py has ever been run, or while it's still running --
   // to "Germany not loaded," not a broken page.
+  // The 4 ENC JSON files (2026-07-25) join the same Promise.all -- they used
+  // to be blocking <script src> tags loaded strictly BEFORE this point, so
+  // this is a real reduction in total wait, not just a reshuffle: they now
+  // download concurrently with the 6 binary grids instead of serially
+  // before them, and JSON.parse (off the main HTML-parse path) is much
+  // faster than the JS-source parse the old <script> tags paid for.
   Promise.all([
     _loadBinaryGrid('current_grid.meta.json'),
     _loadBinaryGrid('depth_grid.meta.json'),
     _loadBinaryGrid('water_level_grid.meta.json'),
     _loadBinaryGrid('current_grid_de.meta.json'),
     _loadBinaryGrid('depth_grid_de.meta.json'),
-    _loadBinaryGrid('water_level_grid_de.meta.json')
+    _loadBinaryGrid('water_level_grid_de.meta.json'),
+    _loadJsonGlobal('enc_soundg_t17.json', 'ENC_SOUNDG_T17'),
+    _loadJsonGlobal('enc_features_t17_simplified.json', 'ENC_FEATURES_T17_SIMPLIFIED'),
+    _loadJsonGlobal('enc_soundg_de.json', 'ENC_SOUNDG_DE'),
+    _loadJsonGlobal('enc_features_de_simplified.json', 'ENC_FEATURES_DE_SIMPLIFIED')
   ]).then(function (results) {
     startApp(results[0], results[1], results[2], results[3], results[4], results[5]);
     var elapsedS = ((performance.now() - _loadStartMs) / 1000).toFixed(1);

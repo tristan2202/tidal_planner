@@ -540,7 +540,7 @@ if __name__ == "__main__":
         # already-written enc_features_t17.js so this can be re-run alone
         # without redoing the S-57 cell read. Writes a SEPARATE file
         # (DEPARE only -- SOUNDG needs no simplification, it lives in its
-        # own always-eager-loaded enc_soundg_native_t17.js regardless of
+        # own always-eager-loaded enc_soundg_t17.json regardless of
         # this toggle) so index.html can load both and switch between
         # them -- kept permanently, not removed once decided: simplified
         # is the default (fast page load), native is an opt-in "high
@@ -549,7 +549,7 @@ if __name__ == "__main__":
         features = gc.load_enc_features("enc_features_t17.js")
         depare = [f for f in features if f["properties"]["layer"] == "DEPARE"]
         simplified = gc.simplify_depare_features(depare)
-        gc.write_enc_geojson(simplified, "enc_features_t17_simplified.js", var_name="ENC_FEATURES_T17_SIMPLIFIED")
+        gc.write_enc_geojson(simplified, "enc_features_t17_simplified.json", var_name="ENC_FEATURES_T17_SIMPLIFIED")
     elif geojson_only:
         # Phase A of the vector-tile depth rewrite (2026-07-23, see the
         # approved plan) -- reuses the already-written depth_grid.js's own
@@ -568,7 +568,7 @@ if __name__ == "__main__":
         depare = [f for f in features if f["properties"]["layer"] == "DEPARE"]
         soundg = [f for f in features if f["properties"]["layer"] == "SOUNDG"]
         gc.write_enc_geojson(depare, "enc_features_t17.js")
-        gc.write_enc_geojson(soundg, "enc_soundg_native_t17.js", var_name="ENC_SOUNDG_T17")
+        gc.write_enc_geojson(soundg, "enc_soundg_t17.json", var_name="ENC_SOUNDG_T17")
     elif depare_only:
         fine_def = load_fine_grid_def()
         depare_bands = extract_depare_bands(fine_def)
