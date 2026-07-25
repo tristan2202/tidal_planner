@@ -4531,6 +4531,24 @@
       lastPick = null;
       lastPreviewArrivals = null;
       updatePreviewPanel();
+      // Bug fix 2026-07-25 (user report): switching Optimizer -> Live used
+      // to leave displayedMs, and everything keyed off the separate refHwMs
+      // global (the Current Overlay, the tidal-curve panel), at whatever
+      // stale instant they were last at -- neither refreshRefHw() nor
+      // redrawDiagCurrent() is otherwise called on a mode switch, only the
+      // Map Time widget's own step buttons trigger those (via
+      // updateTimeDisplay()). So the Current Overlay could show a
+      // completely different instant than the route/depth picture
+      // drawRouteSnapshot() draws below it -- contradictory information, per
+      // the user's own report ("I get the overlay at map time, not at the
+      // time of the optimizer"). Jumping to the real current time here, and
+      // routing through updateTimeDisplay() (which refreshes refHwMs, the
+      // Current Overlay, the tidal-curve panel, AND the route/stats) rather
+      // than leaving those to renderPanel() alone, makes every element on
+      // the map agree on the same instant the moment Live mode is
+      // (re-)entered -- "everything needs to be time-synched" (user).
+      displayedMs = Date.now();
+      updateTimeDisplay();
     }
     renderPanel();
   }
