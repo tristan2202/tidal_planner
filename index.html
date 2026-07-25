@@ -2319,10 +2319,25 @@
   // on now read off ONE display. `candidates` is runOptimizer()'s own
   // per-departure sweep (null in Live mode, or whenever nothing has been
   // computed yet -- no shading drawn then).
+  // Real bug fixed 2026-07-26 (user report: Route Optimizer's "Next cycle"
+  // showed the tidal-curve shading as all-green for later cycles, despite
+  // the curve's own water-height line still correctly showing the route
+  // drying at every low water): `list` (lastOptimizerCandidates) only
+  // covers runOptimizer()'s own +-12.5h sweep around planDateRefHwMs, but
+  // the curve widget is centered on the PICKED departure (lastPickDepartureMs
+  // -- can land anywhere within that 25h window, not necessarily at its
+  // center) and spans +-grid.m2Hours around THAT point. Whenever the pick
+  // sits off-center, the curve's own displayed range extends past what the
+  // sweep actually evaluated -- this function used to silently clamp any
+  // out-of-range ms to the nearest EDGE candidate's feasibility, painting a
+  // confident-looking but fabricated verdict over a stretch of real tidal
+  // cycle that was never actually checked. Now returns null for genuinely
+  // out-of-range ms; callers must treat that as "unknown," not "feasible."
   function _nearestCandidateByMs(list, ms) {
     var lo = 0, hi = list.length - 1;
-    if (ms <= list[0].departureMs) return list[0];
-    if (ms >= list[hi].departureMs) return list[hi];
+    if (ms < list[0].departureMs || ms > list[hi].departureMs) return null;
+    if (ms === list[0].departureMs) return list[0];
+    if (ms === list[hi].departureMs) return list[hi];
     while (lo < hi) {
       var mid = (lo + hi) >> 1;
       if (list[mid].departureMs < ms) lo = mid + 1; else hi = mid;
@@ -2356,7 +2371,10 @@
       if (wl === null) continue;
       var topY = Math.min(yAt(wl), baseY);
       var c = _nearestCandidateByMs(candidates, ms);
-      ctx.fillStyle = c.unknown ? 'rgba(153,153,153,0.28)' : (c.feasible ? 'rgba(26,122,26,0.28)' : 'rgba(192,57,43,0.28)');
+      // c is null when ms falls outside the actual computed sweep range
+      // (see _nearestCandidateByMs's own comment) -- render as unknown/grey,
+      // same as a real no-data candidate, rather than fabricating a color.
+      ctx.fillStyle = (!c || c.unknown) ? 'rgba(153,153,153,0.28)' : (c.feasible ? 'rgba(26,122,26,0.28)' : 'rgba(192,57,43,0.28)');
       ctx.fillRect(x, topY, 1, baseY - topY);
     }
   }
