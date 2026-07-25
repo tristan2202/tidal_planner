@@ -93,10 +93,11 @@ and must never be used as the sole or primary means of navigation.**
 
 - **Measured water level** (both countries): genuinely live, refetched on
   every page load.
-- **Tide predictions (HW/LW timing)**: real astronomical predictions,
-  refreshed periodically by the maintainer (Netherlands: every 1–2 weeks,
-  limited by a rolling ~16-day upstream window; Germany: roughly once a
-  year, since the upstream source publishes a full year+ at a time).
+- **Tide predictions (HW/LW timing)**: real astronomical predictions.
+  Netherlands: refreshed **automatically every week** via a scheduled
+  GitHub Actions workflow (limited by a rolling ~16-day upstream window —
+  see `DEPLOY.md`); Germany: refreshed manually, roughly once a year,
+  since the upstream source publishes a full year+ at a time.
 - **Charted depth**: refreshed occasionally, not on a fixed schedule — see
   "Data sources" above for each side's upstream update cadence.
 - **Tidal current/water-level *model***: tied to a single fixed model year

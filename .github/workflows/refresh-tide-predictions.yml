@@ -1,0 +1,64 @@
+name: Refresh tide predictions
+
+# extract_astro_getij.py's own data source (waterinfo.rws.nl's
+# astronomische-getij chart API) only ever publishes a rolling ~16-day
+# window -- see that script's module docstring and MAINTENANCE.md. Weekly
+# (not the originally-discussed monthly, and not trying to hit exactly
+# 14 days via cron's day-of-month fields, which drifts unevenly across
+# month boundaries) keeps this comfortably refreshed with real margin to
+# spare before the window would ever run out.
+#
+# Deliberately NOT scheduling extract_grids.py/extract_grids_de.py here --
+# their current/water-level extraction is a frozen, non-time-varying model
+# (TrilaWatt, tied to fixed year 2022); re-running it against unchanged
+# source data on any schedule is wasted compute/bandwidth (see
+# MAINTENANCE.md's own "re-run only if BAW ships a new model version").
+on:
+  schedule:
+    - cron: '0 3 * * 1' # every Monday, 03:00 UTC
+  workflow_dispatch: {} # allow a manual run from the Actions tab too
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Stdlib only (json/urllib/datetime) -- no pip install needed.
+      - name: Fetch fresh RWS tide predictions
+        run: python extract_astro_getij.py
+
+      - name: Commit updated prediction files
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tide_predictions_*.js
+          if git diff --cached --quiet; then
+            echo "No changes from this refresh."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "Refresh RWS tide predictions (scheduled)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only re-deploy if something actually changed. A fresh checkout
+      # never has the 6 R2-hosted large files (they're .gitignore'd, see
+      # DEPLOY.md) -- so unlike redeploy.ps1's local-dev version, there's
+      # nothing to stash/restore here; they simply aren't present.
+      - name: Deploy to Cloudflare Pages
+        if: steps.commit.outputs.changed == 'true'
+        run: |
+          npm install -g wrangler
+          wrangler pages deploy . --project-name=tidal-planner --commit-dirty=true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
