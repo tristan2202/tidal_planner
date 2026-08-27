@@ -31,3 +31,11 @@ water_level_grid_de.bin
 water_level_grid.bin
 enc_soundg_t17.json
 enc_features_t17.js
+
+# Gzipped copies of the startup-path data files (2026-08-23), built by
+# compress_data.py and served instead of the originals -- index.html
+# gunzips them client-side via DecompressionStream. Generated artifacts of
+# files that are either already in this repo or already excluded above, so
+# committing them would just store the same bytes twice. Rebuild with:
+#   python compress_data.py
+*.gz

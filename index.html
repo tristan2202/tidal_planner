@@ -409,7 +409,7 @@
 <div id="load-popup-backdrop">
   <div id="load-popup">
     <div id="load-popup-title">Loading map data…</div>
-    <div id="load-popup-msg">Fetching NL + Germany current/depth/water-level grids (~450 MB). First load typically takes 20-30s.</div>
+    <div id="load-popup-msg">Fetching NL + Germany current/depth/water-level grids (~100 MB, gzip-compressed from ~490 MB). How long depends on your connection; they are then browser-cached for a day.</div>
     <button id="load-popup-close">OK</button>
   </div>
 </div>
@@ -727,12 +727,50 @@
     });
     return out;
   }
+  // Fetch `url`, preferring a gzipped `url + '.gz'` sibling and gunzipping
+  // it here in the browser (2026-08-23 -- see compress_data.py). Measured on
+  // the live site: the six .bin grids and enc_soundg_t17.json are ~492 MB of
+  // the ~499 MB this page downloads at startup, and Cloudflare serves every
+  // one of them UNCOMPRESSED, because it only auto-compresses text-ish
+  // content types and these go out as application/octet-stream. Gzipped they
+  // total ~91 MB.
+  //
+  // CRITICAL, and the reason this works where 2026-07-25's attempt did not:
+  // nothing here claims the response is encoded. That attempt served the
+  // same gzipped bytes with `Content-Encoding: gzip` set by the Pages
+  // Function and expected the browser to decompress transparently; verified
+  // against the real edge (curl, Node, and Chromium) the client got the
+  // compressed bytes unchanged, so it was reverted -- see
+  // functions/_middleware.js's own header comment. Here the .gz is just
+  // opaque bytes and DecompressionStream does the work on the client, so no
+  // CDN behaviour is depended on and no Worker CPU is spent.
+  //
+  // Falls back to the plain file on any failure -- a browser without
+  // DecompressionStream (Safari <16.4), or a deploy where the .gz has not
+  // been uploaded yet. That fallback is why the uncompressed originals stay
+  // deployed alongside the .gz files rather than being replaced by them.
+  function _fetchPreferGz(url) {
+    if (typeof DecompressionStream !== 'function') return fetch(url);
+    return fetch(url + '.gz').then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (!r.body) throw new Error('no response body to stream');
+      // Wrapping the decompressed stream in a Response gives callers back
+      // the same .arrayBuffer()/.json() interface a plain fetch() returns,
+      // so both paths below are identical from here on.
+      return new Response(r.body.pipeThrough(new DecompressionStream('gzip')));
+    }).catch(function (err) {
+      console.warn('gz fetch failed for ' + url + '.gz (' + err.message +
+                   ') -- falling back to the uncompressed file');
+      return fetch(url);
+    });
+  }
+
   function _loadBinaryGrid(metaUrl) {
     return fetch(metaUrl).then(function (r) {
       if (!r.ok) throw new Error(metaUrl + ': HTTP ' + r.status);
       return r.json();
     }).then(function (meta) {
-      return fetch(meta.bin).then(function (r) {
+      return _fetchPreferGz(meta.bin).then(function (r) {
         if (!r.ok) throw new Error(meta.bin + ': HTTP ' + r.status);
         return r.arrayBuffer();
       }).then(function (buf) { return _unpackGrid(buf, meta); });
@@ -754,8 +792,13 @@
   // below). Resolves to undefined (not throwing) on failure, same
   // fail-soft behavior as _loadBinaryGrid -- a missing ENC file degrades
   // that region's depth query, it shouldn't block the whole app.
-  function _loadJsonGlobal(url, varName) {
-    return fetch(url).then(function (r) {
+  // `preferGz` is opt-in per file rather than always-on (2026-08-23): only
+  // enc_soundg_t17.json has a .gz, because it is the one JSON here big
+  // enough that Cloudflare declines to compress it (60.7 MB on the wire).
+  // The other three already arrive brotli-compressed for free, so probing
+  // for a .gz that will never exist would just add three 404s to every load.
+  function _loadJsonGlobal(url, varName, preferGz) {
+    return (preferGz ? _fetchPreferGz(url) : fetch(url)).then(function (r) {
       if (!r.ok) throw new Error(url + ': HTTP ' + r.status);
       return r.json();
     }).then(function (data) {
@@ -4840,7 +4883,7 @@
     _loadBinaryGrid('current_grid_de.meta.json'),
     _loadBinaryGrid('depth_grid_de.meta.json'),
     _loadBinaryGrid('water_level_grid_de.meta.json'),
-    _loadJsonGlobal('enc_soundg_t17.json', 'ENC_SOUNDG_T17'),
+    _loadJsonGlobal('enc_soundg_t17.json', 'ENC_SOUNDG_T17', true),
     _loadJsonGlobal('enc_features_t17_simplified.json', 'ENC_FEATURES_T17_SIMPLIFIED'),
     _loadJsonGlobal('enc_soundg_de.json', 'ENC_SOUNDG_DE'),
     _loadJsonGlobal('enc_features_de_simplified.json', 'ENC_FEATURES_DE_SIMPLIFIED')

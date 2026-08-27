@@ -68,6 +68,20 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # The .gz copies the app actually fetches are gitignored build
+      # artifacts (see compress_data.py), so a fresh checkout has none of
+      # them -- and `wrangler pages deploy .` uploads the directory as it
+      # stands, which would silently DROP depth_grid.bin.gz and
+      # depth_grid_de.bin.gz from the live site every Monday. The page
+      # would still work (index.html falls back to the uncompressed file)
+      # but 23.6 MB of every visitor's first load would quietly come back.
+      # Rebuilding them here costs about a second. The 5 R2-hosted .gz
+      # files aren't rebuilt (their sources are .gitignore'd and absent
+      # here) and don't need to be -- a Pages deploy doesn't touch R2.
+      - name: Rebuild compressed data files
+        if: steps.commit.outputs.changed == 'true'
+        run: python compress_data.py
+
       # Only re-deploy if something actually changed. A fresh checkout
       # never has the 6 R2-hosted large files (they're .gitignore'd, see
       # DEPLOY.md) -- so unlike redeploy.ps1's local-dev version, there's

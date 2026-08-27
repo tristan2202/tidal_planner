@@ -39,13 +39,31 @@
 // DecompressionStream before responding, at the cost of Worker CPU time --
 // not attempted, since it reintroduces the very CPU-budget risk that ruled
 // out on-the-fly compression in the other direction).
+//
+// GZIP -- SOLVED A DIFFERENT WAY, 2026-08-23 (see compress_data.py and
+// index.html's _fetchPreferGz). The finding above still holds and is why
+// this file sets NO Content-Encoding: instead the app fetches the `.gz`
+// sibling as ordinary opaque bytes and gunzips it in the browser with
+// DecompressionStream. Nothing claims the response is encoded, so there is
+// nothing for the edge to transparently (not) handle, and the Worker still
+// only streams bytes. ~499 MB of startup downloads becomes ~91 MB.
+//
+// Both the .gz and the original are listed below on purpose: the loader
+// falls back to the uncompressed file if the .gz 404s or the browser has no
+// DecompressionStream, so removing the originals would turn a graceful
+// degradation into a broken page on older Safari.
 const R2_FILES = new Set([
   'current_grid_de.bin',
   'current_grid.bin',
   'water_level_grid_de.bin',
   'water_level_grid.bin',
   'enc_soundg_t17.json',
-  'enc_features_t17.js'
+  'enc_features_t17.js',
+  'current_grid_de.bin.gz',
+  'current_grid.bin.gz',
+  'water_level_grid_de.bin.gz',
+  'water_level_grid.bin.gz',
+  'enc_soundg_t17.json.gz'
 ]);
 
 export async function onRequest({ request, env, next }) {
@@ -66,6 +84,13 @@ export async function onRequest({ request, env, next }) {
   }
   const headers = new Headers();
   obj.writeHttpMetadata(headers);
+  // Defensive (2026-08-23): writeHttpMetadata replays whatever HTTP metadata
+  // the R2 object was stored with, so if a .gz were ever uploaded with
+  // `--content-encoding gzip` this would silently re-create exactly the
+  // 2026-07-25 failure described above -- the client would be handed bytes
+  // labelled as encoded that nothing decodes. The app decompresses these
+  // itself; they must travel as plain opaque bytes.
+  headers.delete('content-encoding');
   headers.set('etag', obj.httpEtag);
   // These files are content-addressed by re-running the extraction
   // pipeline, not versioned by filename -- a long, immutable cache is safe
